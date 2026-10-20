@@ -1,0 +1,33 @@
+package com.example.data.local.entity
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "tournaments")
+data class Tournament(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val name: String,
+    val edition: String = "1",
+    val entryFee: Double = 0.0,
+    val playersPerTeam: Int = 7,
+    val matchDurationMinutes: Int = 20,
+    val status: String = "PLANNING", // PLANNING, IN_PROGRESS, FINISHED
+    val championTeamId: Long? = null,
+    val runnerUpTeamId: Long? = null,
+    val prizeChampionEnabled: Boolean = true,
+    val prizeChampionAmount: Double = 0.0,
+    val prizeRunnerUpEnabled: Boolean = true,
+    val prizeRunnerUpAmount: Double = 0.0,
+    val prizeTopScorerEnabled: Boolean = true,
+    val prizeTopScorerAmount: Double = 0.0,
+    val prizeTopAssisterEnabled: Boolean = true,
+    val prizeTopAssisterAmount: Double = 0.0,
+    val prizeBestGkEnabled: Boolean = true,
+    val prizeBestGkAmount: Double = 0.0,
+    val minMatchesForBestGk: Int = 2,
+    val createdAt: Long = System.currentTimeMillis()
+) {
+    val feePerPlayer: Double
+        get() = if (playersPerTeam > 0) entryFee / playersPerTeam else 0.0
+}

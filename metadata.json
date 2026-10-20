@@ -1,0 +1,6 @@
+{
+  "name": "TheBiG",
+  "description": "Gestor profesional de torneos de fútbol, estadísticas, finanzas y actas de partido en tiempo real creado por Daniel (el Grande)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
