@@ -13,13 +13,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-data class TeamFinancialBalance(
-    val teamId: Long,
-    val totalPlayers: Int,
-    val paidPlayers: Int,
-    val pendingPlayers: Int
-)
-
 class TeamViewModel(private val repository: TheBiGRepository) : ViewModel() {
 
     // Clean initial state: zero teams loaded
@@ -83,11 +76,12 @@ class TeamViewModel(private val repository: TheBiGRepository) : ViewModel() {
         name: String,
         dorsal: Int,
         isGoalkeeper: Boolean,
-        feePaid: Boolean = false
+        feePaid: Boolean = false,
+        isCaptain: Boolean = false
     ): Result<Long> {
         val currentPlayers = repository.getPlayersForTeamOnce(teamId)
         if (currentPlayers.size >= 22) {
-            return Result.failure(Exception("El equipo ya alcanzó el límite máximo de 22 jugadores"))
+            return Result.failure(Exception("El equipo ya alcanzó el límite reglamentario de 22 jugadores"))
         }
 
         val player = Player(
@@ -95,7 +89,8 @@ class TeamViewModel(private val repository: TheBiGRepository) : ViewModel() {
             name = name.trim(),
             dorsal = dorsal,
             isGoalkeeper = isGoalkeeper,
-            feePaid = feePaid
+            feePaid = feePaid,
+            isCaptain = isCaptain
         )
         val id = repository.savePlayer(player)
         return Result.success(id)
@@ -116,6 +111,12 @@ class TeamViewModel(private val repository: TheBiGRepository) : ViewModel() {
     fun togglePlayerFee(playerId: Long, currentPaid: Boolean) {
         viewModelScope.launch {
             repository.updatePlayerFeeStatus(playerId, !currentPaid)
+        }
+    }
+
+    fun toggleCaptain(teamId: Long, playerId: Long, currentIsCaptain: Boolean) {
+        viewModelScope.launch {
+            repository.setTeamCaptain(teamId, playerId, !currentIsCaptain)
         }
     }
 }

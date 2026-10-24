@@ -16,10 +16,10 @@ interface MatchEventDao {
     @Query("SELECT * FROM match_events WHERE matchId = :matchId ORDER BY minute ASC, timestamp ASC")
     suspend fun getEventsForMatchOnce(matchId: Long): List<MatchEvent>
 
-    @Query("SELECT * FROM match_events WHERE matchId IN (SELECT id FROM matches WHERE tournamentId = :tournamentId)")
+    @Query("SELECT me.* FROM match_events me INNER JOIN matches m ON me.matchId = m.id WHERE m.tournamentId = :tournamentId ORDER BY me.timestamp ASC")
     fun getAllEventsForTournament(tournamentId: Long): Flow<List<MatchEvent>>
 
-    @Query("SELECT * FROM match_events WHERE matchId IN (SELECT id FROM matches WHERE tournamentId = :tournamentId)")
+    @Query("SELECT me.* FROM match_events me INNER JOIN matches m ON me.matchId = m.id WHERE m.tournamentId = :tournamentId ORDER BY me.timestamp ASC")
     suspend fun getAllEventsForTournamentOnce(tournamentId: Long): List<MatchEvent>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

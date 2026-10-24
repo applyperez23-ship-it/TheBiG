@@ -8,38 +8,16 @@ import com.example.data.local.entity.MatchEvent
 import com.example.data.local.entity.Player
 import com.example.data.local.entity.Team
 import com.example.data.local.entity.Tournament
+import com.example.data.local.entity.TournamentModes
+import com.example.data.local.entity.AwardTimingModes
 import com.example.data.local.entity.TournamentTeamCrossRef
 import com.example.data.repository.TheBiGRepository
-import com.example.domain.rules.AssisterStat
-import com.example.domain.rules.GoalkeeperStat
-import com.example.domain.rules.PrizeCalculator
-import com.example.domain.rules.ScorerStat
-import com.example.domain.rules.StandingsCalculator
-import com.example.domain.rules.StatsCalculator
-import com.example.domain.rules.TeamStanding
-import com.example.domain.rules.TournamentFinancialSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-
-data class TournamentDetailUiState(
-    val tournament: Tournament? = null,
-    val enrolledTeams: List<Team> = emptyList(),
-    val crossRefs: List<TournamentTeamCrossRef> = emptyList(),
-    val matches: List<Match> = emptyList(),
-    val events: List<MatchEvent> = emptyList(),
-    val players: List<Player> = emptyList(),
-    val standings: List<TeamStanding> = emptyList(),
-    val topScorers: List<ScorerStat> = emptyList(),
-    val topAssisters: List<AssisterStat> = emptyList(),
-    val goalkeeperRankings: List<GoalkeeperStat> = emptyList(),
-    val financialSummary: TournamentFinancialSummary? = null,
-    val selectedSubTab: Int = 0 // 0: Tablas, 1: Partidos, 2: Estadísticas, 3: Finanzas
-)
 
 class TournamentViewModel(private val repository: TheBiGRepository) : ViewModel() {
 
@@ -71,12 +49,17 @@ class TournamentViewModel(private val repository: TheBiGRepository) : ViewModel(
         entryFee: Double,
         playersPerTeam: Int = 7,
         matchDurationMinutes: Int = 20,
+        tournamentType: String = TournamentModes.LEAGUE,
+        awardTiming: String = AwardTimingModes.END_OF_LEAGUE,
         prizeChampion: Double,
         prizeRunnerUp: Double,
         prizeScorer: Double,
         prizeAssister: Double,
         prizeBestGk: Double,
-        minMatchesGk: Int
+        prizeMvp: Double = 0.0,
+        yellowCardFine: Double = 5.0,
+        redCardFine: Double = 10.0,
+        minMatchesGk: Int = 2
     ): Long {
         val t = Tournament(
             name = name.trim(),
@@ -84,6 +67,8 @@ class TournamentViewModel(private val repository: TheBiGRepository) : ViewModel(
             entryFee = entryFee,
             playersPerTeam = playersPerTeam,
             matchDurationMinutes = matchDurationMinutes,
+            tournamentType = tournamentType,
+            awardTiming = awardTiming,
             prizeChampionEnabled = prizeChampion > 0,
             prizeChampionAmount = prizeChampion,
             prizeRunnerUpEnabled = prizeRunnerUp > 0,
@@ -94,6 +79,10 @@ class TournamentViewModel(private val repository: TheBiGRepository) : ViewModel(
             prizeTopAssisterAmount = prizeAssister,
             prizeBestGkEnabled = prizeBestGk > 0,
             prizeBestGkAmount = prizeBestGk,
+            prizeMvpEnabled = true,
+            prizeMvpAmount = prizeMvp,
+            yellowCardFine = yellowCardFine,
+            redCardFine = redCardFine,
             minMatchesForBestGk = minMatchesGk
         )
         return repository.saveTournament(t)
@@ -114,58 +103,37 @@ class TournamentViewModel(private val repository: TheBiGRepository) : ViewModel(
         }
     }
 
-    fun enrollTeam(tournamentId: Long, teamId: Long, feePaid: Boolean = false) {
+    fun enrollTeam(tournamentId: Long, teamId: Long, feePaid: Boolean) {
         viewModelScope.launch {
             repository.enrollTeam(tournamentId, teamId, feePaid)
         }
     }
 
-    fun removeTeam(tournamentId: Long, teamId: Long) {
+    fun removeTeamFromTournament(tournamentId: Long, teamId: Long) {
         viewModelScope.launch {
             repository.removeTeamFromTournament(tournamentId, teamId)
         }
     }
 
-    fun toggleTeamFee(tournamentId: Long, teamId: Long, currentPaid: Boolean) {
+    fun updateTeamFeeStatus(tournamentId: Long, teamId: Long, feePaid: Boolean) {
         viewModelScope.launch {
-            repository.updateTournamentTeamFee(tournamentId, teamId, !currentPaid)
+            repository.updateTournamentTeamFee(tournamentId, teamId, feePaid)
         }
     }
 
-    fun generateRoundRobinFixture(tournamentId: Long, teams: List<Team>) {
-        if (teams.size < 2) return
+    fun generateFixture(tournamentId: Long) {
         viewModelScope.launch {
-            val matchList = mutableListOf<Match>()
-            val count = teams.size
-            var roundNum = 1
-            for (i in 0 until count) {
-                for (j in i + 1 until count) {
-                    matchList.add(
-                        Match(
-                            tournamentId = tournamentId,
-                            homeTeamId = teams[i].id,
-                            awayTeamId = teams[j].id,
-                            roundName = "Jornada $roundNum",
-                            status = "SCHEDULED",
-                            currentPeriod = "NO_INICIADO"
-                        )
-                    )
-                    roundNum++
-                }
-            }
-            for (m in matchList) {
-                repository.saveMatch(m)
-            }
+            repository.generateRoundRobinFixture(tournamentId)
         }
     }
 
-    fun setTournamentChampion(tournamentId: Long, championTeamId: Long, runnerUpTeamId: Long?) {
+    fun setChampion(tournamentId: Long, champTeamId: Long, runnerUpId: Long?) {
         viewModelScope.launch {
             val t = repository.getTournamentOnce(tournamentId) ?: return@launch
             repository.updateTournament(
                 t.copy(
-                    championTeamId = championTeamId,
-                    runnerUpTeamId = runnerUpTeamId,
+                    championTeamId = champTeamId,
+                    runnerUpTeamId = runnerUpId,
                     status = "FINISHED"
                 )
             )

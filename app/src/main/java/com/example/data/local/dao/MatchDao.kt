@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MatchDao {
-    @Query("SELECT * FROM matches ORDER BY createdAt DESC, id DESC")
+    @Query("SELECT * FROM matches ORDER BY scheduledTimestamp ASC")
     fun getAllMatches(): Flow<List<Match>>
 
     @Query("SELECT * FROM matches WHERE tournamentId = :tournamentId ORDER BY id ASC")
@@ -26,7 +26,7 @@ interface MatchDao {
     @Query("SELECT * FROM matches WHERE id = :id")
     suspend fun getMatchByIdOnce(id: Long): Match?
 
-    @Query("SELECT * FROM matches WHERE status = 'LIVE' ORDER BY id DESC")
+    @Query("SELECT * FROM matches WHERE status = 'LIVE'")
     fun getLiveMatches(): Flow<List<Match>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

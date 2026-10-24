@@ -11,16 +11,16 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PlayerDao {
-    @Query("SELECT * FROM players WHERE teamId = :teamId ORDER BY dorsal ASC, name ASC")
+    @Query("SELECT * FROM players WHERE teamId = :teamId ORDER BY isCaptain DESC, dorsal ASC, name ASC")
     fun getPlayersForTeam(teamId: Long): Flow<List<Player>>
 
-    @Query("SELECT * FROM players WHERE teamId = :teamId ORDER BY dorsal ASC, name ASC")
+    @Query("SELECT * FROM players WHERE teamId = :teamId ORDER BY isCaptain DESC, dorsal ASC, name ASC")
     suspend fun getPlayersForTeamOnce(teamId: Long): List<Player>
 
     @Query("SELECT * FROM players WHERE id = :id")
     suspend fun getPlayerById(id: Long): Player?
 
-    @Query("SELECT * FROM players WHERE teamId IN (:teamIds)")
+    @Query("SELECT * FROM players WHERE teamId IN (:teamIds) ORDER BY isCaptain DESC, dorsal ASC")
     suspend fun getPlayersForTeamsOnce(teamIds: List<Long>): List<Player>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -40,6 +40,12 @@ interface PlayerDao {
 
     @Query("UPDATE players SET feePaid = :feePaid WHERE id = :playerId")
     suspend fun updatePlayerFeeStatus(playerId: Long, feePaid: Boolean)
+
+    @Query("UPDATE players SET isCaptain = 0 WHERE teamId = :teamId")
+    suspend fun clearCaptainForTeam(teamId: Long)
+
+    @Query("UPDATE players SET isCaptain = :isCaptain WHERE id = :playerId")
+    suspend fun setPlayerCaptainStatus(playerId: Long, isCaptain: Boolean)
 
     @Query("SELECT COUNT(*) FROM players WHERE teamId = :teamId")
     suspend fun getPlayerCountForTeam(teamId: Long): Int

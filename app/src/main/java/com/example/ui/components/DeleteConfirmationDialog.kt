@@ -1,6 +1,5 @@
 package com.example.ui.components
 
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -11,11 +10,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 
+/**
+ * Defensive confirmation dialog required for deleting any Tournament, Team, Match or Player
+ */
 @Composable
 fun DeleteConfirmationDialog(
     itemName: String,
@@ -24,7 +24,6 @@ fun DeleteConfirmationDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
         icon = {
             Icon(
                 imageVector = Icons.Default.Warning,
@@ -35,14 +34,12 @@ fun DeleteConfirmationDialog(
         title = {
             Text(
                 text = "Confirmar Eliminación",
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium
+                fontWeight = FontWeight.Bold
             )
         },
         text = {
             Text(
-                text = "¿Deseas eliminar $itemName? Esta acción no se puede deshacer.",
-                style = MaterialTheme.typography.bodyMedium
+                text = "¿Estás seguro de que deseas eliminar permanentemente $itemName? Esta acción no se puede deshacer y borrará todos sus registros asociados."
             )
         },
         confirmButton = {
@@ -52,16 +49,14 @@ fun DeleteConfirmationDialog(
                     containerColor = MaterialTheme.colorScheme.error,
                     contentColor = MaterialTheme.colorScheme.onError
                 ),
-                shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.testTag("confirm_delete_button")
             ) {
-                Text("Eliminar")
+                Text("Eliminar Definitivamente")
             }
         },
         dismissButton = {
             OutlinedButton(
                 onClick = onDismiss,
-                shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.testTag("cancel_delete_button")
             ) {
                 Text("Cancelar")

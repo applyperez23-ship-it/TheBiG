@@ -28,6 +28,7 @@ import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
+import com.example.data.local.entity.Team
 import java.io.File
 import java.io.FileOutputStream
 
@@ -68,6 +69,36 @@ object TeamCrestHelper {
             e.printStackTrace()
             uri.toString()
         }
+    }
+}
+
+@Composable
+fun TeamCrestView(
+    team: Team?,
+    size: Dp = 48.dp,
+    modifier: Modifier = Modifier
+) {
+    if (team != null) {
+        TeamCrestView(
+            shieldIndex = team.shieldVectorIndex,
+            primaryColorHex = team.primaryColorHex,
+            secondaryColorHex = team.secondaryColorHex,
+            borderColorHex = team.borderColorHex,
+            shortName = team.shortName,
+            customShieldUri = team.customShieldUri,
+            size = size,
+            modifier = modifier
+        )
+    } else {
+        TeamCrestView(
+            shieldIndex = 0,
+            primaryColorHex = "#64748B",
+            secondaryColorHex = "#334155",
+            borderColorHex = "#94A3B8",
+            shortName = "TB",
+            size = size,
+            modifier = modifier
+        )
     }
 }
 

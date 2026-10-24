@@ -5,16 +5,22 @@ import com.example.data.local.TheBiGDatabase
 import com.example.data.repository.TheBiGRepository
 
 class TheBiGApp : Application() {
-    val database: TheBiGDatabase by lazy { TheBiGDatabase.getDatabase(this) }
-    val repository: TheBiGRepository by lazy { TheBiGRepository(database) }
 
-    companion object {
-        lateinit var instance: TheBiGApp
-            private set
-    }
+    lateinit var database: TheBiGDatabase
+        private set
+
+    lateinit var repository: TheBiGRepository
+        private set
 
     override fun onCreate() {
         super.onCreate()
         instance = this
+        database = TheBiGDatabase.getDatabase(this)
+        repository = TheBiGRepository(database)
+    }
+
+    companion object {
+        lateinit var instance: TheBiGApp
+            private set
     }
 }

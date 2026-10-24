@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -45,9 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -73,6 +70,7 @@ import com.example.data.local.entity.Player
 import com.example.data.local.entity.Team
 import com.example.ui.components.DeleteConfirmationDialog
 import com.example.ui.viewmodel.TeamViewModel
+import com.example.util.ImageEnhancer
 import com.example.util.JerseyPatternType
 import com.example.util.TeamCrestHelper
 import com.example.util.TeamCrestView
@@ -151,10 +149,10 @@ fun TeamDetailScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
-                    if (players.size < 22) {
-                        showAddPlayerDialog = true
+                    if (players.size >= 22) {
+                        errorMessage = "La plantilla ya alcanzó el máximo permitido de 22 jugadores."
                     } else {
-                        errorMessage = "La plantilla ya alcanzó el límite máximo reglamentario de 22 jugadores"
+                        showAddPlayerDialog = true
                     }
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -170,35 +168,19 @@ fun TeamDetailScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Club Visual Identity Card (Uniforms & Shield)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                )
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Uniformes del Club",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = "Patrón: ${formatPatternName(team.jerseyPattern)}",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-
+                    Text(
+                        text = "Identidad y Uniformes del Club",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall
+                    )
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Row(
@@ -206,89 +188,21 @@ fun TeamDetailScreen(
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Outfield Jersey
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TeamJerseyView(team = team, isGoalkeeper = false, dorsal = 10, size = 42.dp)
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text("Jugador Campo", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Text("Uniforme Titular", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Titular", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
 
-                        // Goalkeeper Jersey
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TeamJerseyView(team = team, isGoalkeeper = true, dorsal = 1, size = 42.dp)
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text("Portero", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
-                                Text("Exclusivo Arquero", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Financial Balance Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                )
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Balance Financiero",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        val statusText = when {
-                            players.size < 5 -> "Mínimo 5 requerido (${players.size}/5)"
-                            players.size == 22 -> "Plantilla Completa (22/22)"
-                            else -> "Reglamentario (${players.size}/22)"
-                        }
-                        Text(
-                            text = statusText,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (players.size < 5) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Card(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Text("Cuotas Cobradas", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("$paidCount jugadores", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.secondary)
-                            }
-                        }
-                        Card(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Text("Cuotas Pendientes", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(
-                                    "$pendingCount jugadores",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = if (pendingCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
-                                )
+                                Text("Arquero", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -320,7 +234,7 @@ fun TeamDetailScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Agrega entre 5 y 22 jugadores con su rol (Campo o Portero) y su dorsal permanente.",
+                            text = "Agrega entre 5 y 22 jugadores con su rol, dorsal y asigna la cinta de Capitán (C).",
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -343,6 +257,7 @@ fun TeamDetailScreen(
                             player = player,
                             team = team,
                             onToggleFee = { viewModel.togglePlayerFee(player.id, player.feePaid) },
+                            onToggleCaptain = { viewModel.toggleCaptain(team.id, player.id, player.isCaptain) },
                             onDelete = { playerToDelete = player }
                         )
                     }
@@ -367,9 +282,9 @@ fun TeamDetailScreen(
             currentCount = players.size,
             existingDorsals = players.map { it.dorsal }.toSet(),
             onDismiss = { showAddPlayerDialog = false },
-            onConfirm = { name, dorsal, isGk, feePaid ->
+            onConfirm = { name, dorsal, isGk, feePaid, isCaptain ->
                 scope.launch {
-                    val result = viewModel.addPlayer(teamId, name, dorsal, isGk, feePaid)
+                    val result = viewModel.addPlayer(team.id, name, dorsal, isGk, feePaid, isCaptain)
                     if (result.isSuccess) {
                         showAddPlayerDialog = false
                     } else {
@@ -405,28 +320,21 @@ fun TeamDetailScreen(
     }
 }
 
-private fun formatPatternName(pattern: String): String {
-    return when (pattern) {
-        JerseyPatternType.SOLID -> "Lisa"
-        JerseyPatternType.STRIPES_VERTICAL -> "Franjas Verticales"
-        JerseyPatternType.STRIPES_HORIZONTAL -> "Franjas Horizontales"
-        JerseyPatternType.SASH -> "Banda Diagonal"
-        JerseyPatternType.HALF -> "Mitad y Mitad"
-        else -> pattern
-    }
-}
-
 @Composable
 private fun PlayerRowCard(
     player: Player,
     team: Team,
     onToggleFee: () -> Unit,
+    onToggleCaptain: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+        colors = CardDefaults.cardColors(
+            containerColor = if (player.isCaptain) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        )
     ) {
         Row(
             modifier = Modifier
@@ -434,7 +342,6 @@ private fun PlayerRowCard(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Miniature graphic vector of the team's jersey with player's permanent dorsal!
             TeamJerseyView(
                 team = team,
                 isGoalkeeper = player.isGoalkeeper,
@@ -452,6 +359,21 @@ private fun PlayerRowCard(
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.width(6.dp))
+                    if (player.isCaptain) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFF59E0B), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "(C) CAPITÁN",
+                                color = Color(0xFF0F172A),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
                     if (player.isGoalkeeper) {
                         Box(
                             modifier = Modifier
@@ -465,7 +387,7 @@ private fun PlayerRowCard(
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                    } else {
+                    } else if (!player.isCaptain) {
                         Text(
                             text = "Dorsal #${player.dorsal}",
                             fontSize = 11.sp,
@@ -481,7 +403,18 @@ private fun PlayerRowCard(
                 )
             }
 
-            // Fee Checkbox
+            IconButton(
+                onClick = onToggleCaptain,
+                modifier = Modifier.testTag("captain_button_${player.id}")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Shield,
+                    contentDescription = if (player.isCaptain) "Quitar Capitán" else "Designar Capitán (C)",
+                    tint = if (player.isCaptain) Color(0xFFF59E0B) else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
             Checkbox(
                 checked = player.feePaid,
                 onCheckedChange = { onToggleFee() }
@@ -503,17 +436,17 @@ private fun AddPlayerDialog(
     currentCount: Int,
     existingDorsals: Set<Int>,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, dorsal: Int, isGk: Boolean, feePaid: Boolean) -> Unit
+    onConfirm: (name: String, dorsal: Int, isGk: Boolean, feePaid: Boolean, isCaptain: Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    // Auto suggest next unused dorsal number
     val suggestedDorsal = remember {
         var num = 1
         while (existingDorsals.contains(num)) num++
         num
     }
     var dorsal by remember { mutableStateOf("$suggestedDorsal") }
-    var isGoalkeeper by remember { mutableStateOf(currentCount == 0) } // default first player to goalie
+    var isGoalkeeper by remember { mutableStateOf(currentCount == 0) }
+    var isCaptain by remember { mutableStateOf(false) }
     var feePaid by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -534,59 +467,56 @@ private fun AddPlayerDialog(
                 OutlinedTextField(
                     value = dorsal,
                     onValueChange = { dorsal = it },
-                    label = { Text("Número de Dorsal Permanente") },
+                    label = { Text("Dorsal Permanente") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().testTag("player_dorsal_input")
                 )
 
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Rol: Portero", fontWeight = FontWeight.SemiBold)
-                    Switch(
-                        checked = isGoalkeeper,
-                        onCheckedChange = { isGoalkeeper = it }
-                    )
+                    Text("Es Portero (Arquero):", fontWeight = FontWeight.SemiBold)
+                    Switch(checked = isGoalkeeper, onCheckedChange = { isGoalkeeper = it })
                 }
 
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Cuota Pagada", fontWeight = FontWeight.SemiBold)
-                    Checkbox(
-                        checked = feePaid,
-                        onCheckedChange = { feePaid = it }
-                    )
+                    Text("Cinta de Capitán (C):", fontWeight = FontWeight.SemiBold)
+                    Switch(checked = isCaptain, onCheckedChange = { isCaptain = it })
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Cuota de Torneo Pagada:", fontWeight = FontWeight.SemiBold)
+                    Switch(checked = feePaid, onCheckedChange = { feePaid = it })
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
+                    val dNum = dorsal.toIntOrNull() ?: suggestedDorsal
                     if (name.isNotBlank()) {
-                        val d = dorsal.toIntOrNull() ?: suggestedDorsal
-                        onConfirm(name, d, isGoalkeeper, feePaid)
+                        onConfirm(name, dNum, isGoalkeeper, feePaid, isCaptain)
                     }
                 },
                 enabled = name.isNotBlank(),
                 modifier = Modifier.testTag("confirm_add_player_button")
             ) {
-                Text("Registrar")
+                Text("Guardar")
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
+            OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
         }
     )
 }
@@ -608,20 +538,11 @@ private fun EditTeamDialog(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            val copiedUri = TeamCrestHelper.copyShieldUriToInternal(context, uri)
-            customShieldUri = copiedUri
+            val enhancedUri = ImageEnhancer.processAndSaveEnhancedUri(context, uri) ?: TeamCrestHelper.copyShieldUriToInternal(context, uri)
+            customShieldUri = enhancedUri
             shieldMode = "GALLERY"
         }
     }
-
-    val presetColors = listOf(
-        "#F59E0B", "#10B981", "#3B82F6", "#EF4444", "#8B5CF6",
-        "#EC4899", "#0F172A", "#FFFFFF", "#F97316", "#14B8A6"
-    )
-
-    val gkPresetColors = listOf(
-        "#10B981", "#F97316", "#06B6D4", "#EC4899", "#EAB308", "#1E293B", "#8B5CF6"
-    )
 
     var primaryColor by remember { mutableStateOf(team.primaryColorHex) }
     var secondaryColor by remember { mutableStateOf(team.secondaryColorHex) }
@@ -631,7 +552,7 @@ private fun EditTeamDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Personalizar Club y Uniformes", fontWeight = FontWeight.Bold) },
+        title = { Text("Editar Club y Uniformes", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier
@@ -639,40 +560,6 @@ private fun EditTeamDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Live preview
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TeamCrestView(
-                        shieldIndex = selectedShieldIdx,
-                        primaryColorHex = primaryColor,
-                        secondaryColorHex = secondaryColor,
-                        borderColorHex = borderColor,
-                        shortName = shortName,
-                        customShieldUri = if (shieldMode == "GALLERY") customShieldUri else null,
-                        size = 50.dp
-                    )
-                    TeamJerseyView(
-                        primaryColorHex = primaryColor,
-                        secondaryColorHex = secondaryColor,
-                        jerseyPattern = jerseyPattern,
-                        isGoalkeeper = false,
-                        dorsal = 10,
-                        size = 50.dp
-                    )
-                    TeamJerseyView(
-                        primaryColorHex = primaryColor,
-                        secondaryColorHex = secondaryColor,
-                        goalkeeperColorHex = goalkeeperColor,
-                        jerseyPattern = jerseyPattern,
-                        isGoalkeeper = true,
-                        dorsal = 1,
-                        size = 50.dp
-                    )
-                }
-
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -680,7 +567,6 @@ private fun EditTeamDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-
                 OutlinedTextField(
                     value = shortName,
                     onValueChange = { if (it.length <= 4) shortName = it.uppercase() },
@@ -689,103 +575,43 @@ private fun EditTeamDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Text("Escudo (Galería o Vectorial):", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            photoPickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(if (customShieldUri != null && shieldMode == "GALLERY") "Cambiar Foto" else "Desde Galería", fontSize = 11.sp)
-                    }
-
-                    if (customShieldUri != null) {
-                        Button(
-                            onClick = { shieldMode = "PRESET" },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Usar Vectorial", fontSize = 11.sp)
-                        }
-                    }
-                }
-
-                if (shieldMode == "PRESET") {
-                    ScrollableTabRow(
-                        selectedTabIndex = selectedShieldIdx,
-                        edgePadding = 0.dp,
-                        containerColor = Color.Transparent
-                    ) {
-                        TeamCrestHelper.PRESET_NAMES.forEachIndexed { index, title ->
-                            Tab(
-                                selected = selectedShieldIdx == index,
-                                onClick = {
-                                    selectedShieldIdx = index
-                                    shieldMode = "PRESET"
-                                },
-                                text = { Text(title, fontSize = 11.sp) }
-                            )
-                        }
-                    }
-                }
-
-                Text("Diseño Camiseta (Jugadores Campo):", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                ScrollableTabRow(
-                    selectedTabIndex = JerseyPatternType.PATTERN_OPTIONS.indexOfFirst { it.first == jerseyPattern }.coerceAtLeast(0),
-                    edgePadding = 0.dp,
-                    containerColor = Color.Transparent
-                ) {
-                    JerseyPatternType.PATTERN_OPTIONS.forEach { (patternKey, patternLabel) ->
-                        Tab(
-                            selected = jerseyPattern == patternKey,
-                            onClick = { jerseyPattern = patternKey },
-                            text = { Text(patternLabel, fontSize = 11.sp) }
+                OutlinedButton(
+                    onClick = {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                         )
-                    }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (customShieldUri != null) "Cambiar Escudo Galería" else "Subir Escudo Galería")
                 }
-
-                Text("Color Primario:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                ColorSelectorRow(selectedColor = primaryColor, colors = presetColors, onSelect = { primaryColor = it })
-
-                Text("Color Secundario:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                ColorSelectorRow(selectedColor = secondaryColor, colors = presetColors, onSelect = { secondaryColor = it })
-
-                Text("Color Exclusivo del Portero:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                ColorSelectorRow(selectedColor = goalkeeperColor, colors = gkPresetColors, onSelect = { goalkeeperColor = it })
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val finalUri = if (shieldMode == "GALLERY") customShieldUri else null
                     onConfirm(
                         team.copy(
-                            name = name.trim(),
-                            shortName = shortName.trim().uppercase(),
+                            name = name,
+                            shortName = shortName,
                             shieldVectorIndex = selectedShieldIdx,
+                            customShieldUri = if (shieldMode == "GALLERY") customShieldUri else null,
                             primaryColorHex = primaryColor,
                             secondaryColorHex = secondaryColor,
                             borderColorHex = borderColor,
-                            customShieldUri = finalUri,
                             jerseyPattern = jerseyPattern,
                             goalkeeperColorHex = goalkeeperColor
                         )
                     )
-                },
-                enabled = name.isNotBlank()
+                }
             ) {
                 Text("Guardar Cambios")
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
+            OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
         }
     )
 }

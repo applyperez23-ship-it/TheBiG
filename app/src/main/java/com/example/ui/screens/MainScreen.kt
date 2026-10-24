@@ -17,7 +17,6 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -28,13 +27,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.local.entity.Player
 import com.example.data.local.entity.Team
 import com.example.data.local.entity.Tournament
-import com.example.domain.rules.AssisterStat
-import com.example.domain.rules.GoalkeeperStat
-import com.example.domain.rules.ScorerStat
-import com.example.domain.rules.StatsCalculator
 import com.example.ui.components.OnboardingDialog
 import com.example.ui.viewmodel.MatchViewModel
 import com.example.ui.viewmodel.SettingsViewModel
@@ -65,8 +59,6 @@ fun MainScreen(
     val onboardingShown by settingsViewModel.onboardingShown.collectAsStateWithLifecycle()
     val allTeams by teamViewModel.teams.collectAsStateWithLifecycle()
 
-    val app = com.example.TheBiGApp.instance
-
     // Onboarding Mandatory Dialog for first-launch
     if (!onboardingShown) {
         OnboardingDialog(
@@ -74,7 +66,7 @@ fun MainScreen(
         )
     }
 
-    // Handle back button for sub-destinations
+    // Defensive BackHandler for sub-destinations
     BackHandler(enabled = currentDestination !is AppDestination.Main) {
         currentDestination = AppDestination.Main
     }
@@ -204,38 +196,10 @@ fun MainScreen(
         }
 
         is AppDestination.ChampionStudio -> {
-            var teamPlayers by remember { mutableStateOf<List<Player>>(emptyList()) }
-            var topScorers by remember { mutableStateOf<List<ScorerStat>>(emptyList()) }
-            var topAssisters by remember { mutableStateOf<List<AssisterStat>>(emptyList()) }
-            var goalkeeperRankings by remember { mutableStateOf<List<GoalkeeperStat>>(emptyList()) }
-
-            LaunchedEffect(dest.tournament.id, dest.championTeam.id) {
-                teamPlayers = app.repository.getPlayersForTeamOnce(dest.championTeam.id)
-                val matches = app.repository.getMatchesForTournamentOnce(dest.tournament.id)
-                val events = app.repository.getAllEventsForTournamentOnce(dest.tournament.id)
-                val enrolledTeams = app.repository.getTeamsForTournamentOnce(dest.tournament.id)
-                val allPlayers = if (enrolledTeams.isNotEmpty()) {
-                    app.repository.getPlayersForTeamsOnce(enrolledTeams.map { it.id })
-                } else emptyList()
-
-                topScorers = StatsCalculator.getTopScorers(events, allPlayers, enrolledTeams)
-                topAssisters = StatsCalculator.getTopAssisters(events, allPlayers, enrolledTeams)
-                goalkeeperRankings = StatsCalculator.getGoalkeeperRankings(
-                    matches,
-                    allPlayers,
-                    enrolledTeams,
-                    dest.tournament.minMatchesForBestGk
-                )
-            }
-
             ChampionPhotoStudioScreen(
                 tournament = dest.tournament,
                 championTeam = dest.championTeam,
-                teamPlayers = teamPlayers,
-                topScorers = topScorers,
-                topAssisters = topAssisters,
-                goalkeeperRankings = goalkeeperRankings,
-                onBack = { currentDestination = AppDestination.TournamentDetail(dest.tournament.id) }
+                onBack = { currentDestination = AppDestination.Main }
             )
         }
     }

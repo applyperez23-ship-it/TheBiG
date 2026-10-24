@@ -1,15 +1,15 @@
 package com.example.ui.viewmodel
 
 import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.entity.Match
 import com.example.data.local.entity.MatchEvent
-import com.example.data.local.entity.Player
 import com.example.data.local.entity.Team
 import com.example.data.repository.TheBiGRepository
-import com.example.service.MatchTimerManager
+import com.example.service.LiveTimerState
 import com.example.service.MatchTimerService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,7 +26,7 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
     val liveMatches: StateFlow<List<Match>> = repository.liveMatches
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val timerState = MatchTimerManager.timerState
+    val timerState: StateFlow<LiveTimerState> = MatchTimerService.timerState
 
     private val _selectedMatchId = MutableStateFlow<Long?>(null)
     val selectedMatchId: StateFlow<Long?> = _selectedMatchId.asStateFlow()
@@ -39,83 +39,65 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
         tournamentId: Long,
         homeTeamId: Long,
         awayTeamId: Long,
-        roundName: String,
-        matchDate: String = "",
-        matchTime: String = "",
-        isKnockout: Boolean = false
+        roundName: String = "Jornada"
     ): Long {
-        val match = Match(
+        val m = Match(
             tournamentId = tournamentId,
             homeTeamId = homeTeamId,
             awayTeamId = awayTeamId,
             roundName = roundName.trim(),
-            matchDate = matchDate,
-            matchTime = matchTime,
-            isKnockout = isKnockout,
-            status = "SCHEDULED",
-            currentPeriod = "NO_INICIADO"
+            status = "SCHEDULED"
         )
-        return repository.saveMatch(match)
+        return repository.saveMatch(m)
     }
 
-    fun startLiveMatch(
-        context: Context,
-        match: Match,
-        homeTeam: Team,
-        awayTeam: Team
-    ) {
+    fun deleteMatch(id: Long) {
         viewModelScope.launch {
-            val updated = match.copy(
-                status = "LIVE",
-                currentPeriod = if (match.currentPeriod == "NO_INICIADO") "PRIMER_TIEMPO" else match.currentPeriod
-            )
-            repository.updateMatch(updated)
-            MatchTimerService.start(
-                context = context,
-                matchId = updated.id,
-                homeName = homeTeam.name,
-                awayName = awayTeam.name,
-                homeScore = updated.homeScore,
-                awayScore = updated.awayScore,
-                period = updated.currentPeriod,
-                elapsed = updated.elapsedSeconds
-            )
+            repository.deleteMatch(id)
+            if (_selectedMatchId.value == id) {
+                _selectedMatchId.value = null
+            }
+        }
+    }
+
+    fun startLiveMatch(context: Context, match: Match, homeTeam: Team, awayTeam: Team) {
+        viewModelScope.launch {
+            repository.updateMatch(match.copy(status = "LIVE"))
+            val intent = Intent(context, MatchTimerService::class.java).apply {
+                action = MatchTimerService.ACTION_START
+                putExtra(MatchTimerService.EXTRA_MATCH_ID, match.id)
+                putExtra(MatchTimerService.EXTRA_HOME_NAME, homeTeam.name)
+                putExtra(MatchTimerService.EXTRA_AWAY_NAME, awayTeam.name)
+                putExtra(MatchTimerService.EXTRA_DURATION, 20)
+                putExtra(MatchTimerService.EXTRA_ELAPSED, match.elapsedSeconds)
+                putExtra(MatchTimerService.EXTRA_PERIOD, match.currentPeriod)
+            }
+            context.startForegroundService(intent)
         }
     }
 
     fun pauseLiveMatch(context: Context) {
-        MatchTimerService.pause(context)
+        val intent = Intent(context, MatchTimerService::class.java).apply {
+            action = MatchTimerService.ACTION_PAUSE
+        }
+        context.startService(intent)
     }
 
     fun resumeLiveMatch(context: Context) {
-        MatchTimerService.resume(context)
-    }
-
-    fun updatePeriod(context: Context, matchId: Long, newPeriod: String) {
-        viewModelScope.launch {
-            MatchTimerManager.setPeriod(newPeriod)
-            val match = repository.getMatchOnce(matchId) ?: return@launch
-            val updated = match.copy(
-                currentPeriod = newPeriod,
-                elapsedSeconds = MatchTimerManager.timerState.value.elapsedSeconds
-            )
-            repository.updateMatch(updated)
+        val intent = Intent(context, MatchTimerService::class.java).apply {
+            action = MatchTimerService.ACTION_RESUME
         }
+        context.startService(intent)
     }
 
-    fun finishMatch(context: Context, matchId: Long) {
+    fun finishMatch(context: Context, matchId: Long, elapsedSeconds: Int) {
         viewModelScope.launch {
-            val currentElapsed = MatchTimerManager.timerState.value.elapsedSeconds
-            MatchTimerService.stop(context)
-            MatchTimerManager.reset()
-
-            val match = repository.getMatchOnce(matchId) ?: return@launch
-            val updated = match.copy(
-                status = "FINISHED",
-                currentPeriod = "FINALIZADO",
-                elapsedSeconds = currentElapsed
-            )
-            repository.updateMatch(updated)
+            val m = repository.getMatchOnce(matchId) ?: return@launch
+            repository.updateMatch(m.copy(status = "FINISHED", elapsedSeconds = elapsedSeconds))
+            val intent = Intent(context, MatchTimerService::class.java).apply {
+                action = MatchTimerService.ACTION_STOP
+            }
+            context.startService(intent)
         }
     }
 
@@ -123,9 +105,9 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
         matchId: Long,
         teamId: Long,
         playerId: Long?,
-        assistPlayerId: Long? = null,
-        isOwnGoal: Boolean = false,
-        isPenalty: Boolean = false,
+        assistPlayerId: Long?,
+        isOwnGoal: Boolean,
+        isPenalty: Boolean,
         minute: Int
     ) {
         viewModelScope.launch {
@@ -143,10 +125,6 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
                 minute = minute
             )
             repository.addMatchEvent(event)
-
-            // Sync with timer state
-            val match = repository.getMatchOnce(matchId) ?: return@launch
-            MatchTimerManager.setScore(match.homeScore, match.awayScore)
         }
     }
 
@@ -157,7 +135,8 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
                 teamId = teamId,
                 playerId = playerId,
                 eventType = "PENALTY_MISSED",
-                minute = minute
+                minute = minute,
+                extraInfo = "Penalti fallado/atajado"
             )
             repository.addMatchEvent(event)
         }
@@ -184,25 +163,30 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
                 playerId = playerInId,
                 assistPlayerId = playerOutId,
                 eventType = "SUBSTITUTION",
-                minute = minute
+                minute = minute,
+                extraInfo = "Cambio táctico"
             )
             repository.addMatchEvent(event)
         }
     }
 
+    fun recordPenaltyShootoutScore(matchId: Long, homePenalties: Int, awayPenalties: Int) {
+        viewModelScope.launch {
+            val m = repository.getMatchOnce(matchId) ?: return@launch
+            repository.updateMatch(m.copy(homePenalties = homePenalties, awayPenalties = awayPenalties))
+        }
+    }
+
     fun setMatchMvp(matchId: Long, teamId: Long, playerId: Long) {
         viewModelScope.launch {
-            val currentEvents = repository.getEventsForMatchOnce(matchId)
-            val oldMvp = currentEvents.firstOrNull { it.eventType == "MVP" }
-            if (oldMvp != null) {
-                repository.deleteMatchEvent(oldMvp)
-            }
+            val m = repository.getMatchOnce(matchId) ?: return@launch
+            repository.updateMatch(m.copy(mvpPlayerId = playerId))
             val event = MatchEvent(
                 matchId = matchId,
                 teamId = teamId,
                 playerId = playerId,
                 eventType = "MVP",
-                minute = 0
+                extraInfo = "Jugador MVP del Partido"
             )
             repository.addMatchEvent(event)
         }
@@ -211,41 +195,6 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
     fun deleteEvent(event: MatchEvent) {
         viewModelScope.launch {
             repository.deleteMatchEvent(event)
-            val match = repository.getMatchOnce(event.matchId) ?: return@launch
-            MatchTimerManager.setScore(match.homeScore, match.awayScore)
-        }
-    }
-
-    fun recordPenaltyShootoutScore(matchId: Long, homePenalties: Int, awayPenalties: Int) {
-        viewModelScope.launch {
-            val match = repository.getMatchOnce(matchId) ?: return@launch
-            repository.updateMatch(
-                match.copy(
-                    homePenalties = homePenalties,
-                    awayPenalties = awayPenalties
-                )
-            )
-        }
-    }
-
-    fun updateGoalkeepers(matchId: Long, homeGkId: Long?, awayGkId: Long?) {
-        viewModelScope.launch {
-            val match = repository.getMatchOnce(matchId) ?: return@launch
-            repository.updateMatch(
-                match.copy(
-                    homeGoalkeeperPlayerId = homeGkId,
-                    awayGoalkeeperPlayerId = awayGkId
-                )
-            )
-        }
-    }
-
-    fun deleteMatch(id: Long) {
-        viewModelScope.launch {
-            repository.deleteMatch(id)
-            if (_selectedMatchId.value == id) {
-                _selectedMatchId.value = null
-            }
         }
     }
 }

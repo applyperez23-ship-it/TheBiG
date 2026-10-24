@@ -1,69 +1,67 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.util.WhatsAppShareHelper
 
 @Composable
 fun OnboardingDialog(
     onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current
-
     AlertDialog(
-        onDismissRequest = { /* Mandatory dialog - cannot dismiss by clicking outside */ },
-        shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { /* Force acknowledge */ },
+        icon = {
+            TheBiGLogo(size = 48.dp, showText = false)
+        },
         title = {
             Text(
                 text = "Bienvenido a TheBiG",
                 fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleLarge
+                textAlign = TextAlign.Center
             )
         },
         text = {
-            Text(
-                text = "La app fue desarrollada por Daniel (el Grande), con el propósito de un buen torneo de fútbol. Si encuentras algún bug (error) o tienes una sugerencia puedes contactarme por Whatsapp yendo a la configuración de la app a la función 'reportar'.",
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Plataforma nativa para la gestión integral de torneos de fútbol, creada por Daniel (el Grande).",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "• Control financiero por jugador y pozo de sanciones\n• Registro de incidencias arbitrales en vivo\n• Cinta de Capitán (C) en actas y fotos\n• Exportación de tarjetas oficiales 1:1 para Instagram",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         },
         confirmButton = {
             Button(
                 onClick = onDismiss,
-                modifier = Modifier.testTag("onboarding_accept_button"),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("onboarding_accept_button")
             ) {
-                Icon(Icons.Default.Check, contentDescription = null)
-                Text(text = " Aceptar")
-            }
-        },
-        dismissButton = {
-            OutlinedButton(
-                onClick = {
-                    WhatsAppShareHelper.openSupportWhatsApp(context)
-                },
-                modifier = Modifier.testTag("onboarding_report_button")
-            ) {
-                Icon(Icons.Default.Send, contentDescription = null)
-                Text(text = " Reportar")
+                Text("Comenzar")
             }
         }
     )

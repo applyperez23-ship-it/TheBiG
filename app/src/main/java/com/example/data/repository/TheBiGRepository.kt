@@ -43,6 +43,12 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
     suspend fun updatePlayer(player: Player) = db.playerDao().updatePlayer(player)
     suspend fun deletePlayer(id: Long) = db.playerDao().deletePlayerById(id)
     suspend fun updatePlayerFeeStatus(playerId: Long, feePaid: Boolean) = db.playerDao().updatePlayerFeeStatus(playerId, feePaid)
+    suspend fun setTeamCaptain(teamId: Long, playerId: Long, isCaptain: Boolean) {
+        db.playerDao().clearCaptainForTeam(teamId)
+        if (isCaptain) {
+            db.playerDao().setPlayerCaptainStatus(playerId, true)
+        }
+    }
 
     // --- Tournament Teams (CrossRef) ---
     fun getCrossRefsForTournament(tournamentId: Long): Flow<List<TournamentTeamCrossRef>> =
@@ -86,7 +92,6 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
 
     suspend fun addMatchEvent(event: MatchEvent) {
         db.matchEventDao().insertEvent(event)
-        // Automatically sync match score if it's a goal
         val match = db.matchDao().getMatchByIdOnce(event.matchId) ?: return
         when (event.eventType) {
             "GOAL", "PENALTY_GOAL" -> {
@@ -97,7 +102,6 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
                 }
             }
             "OWN_GOAL" -> {
-                // If own goal attributed to player in team A, team B gets the score point
                 if (event.teamId == match.homeTeamId) {
                     db.matchDao().updateMatch(match.copy(awayScore = match.awayScore + 1))
                 } else if (event.teamId == match.awayTeamId) {
@@ -109,37 +113,61 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
 
     suspend fun deleteMatchEvent(event: MatchEvent) {
         db.matchEventDao().deleteEvent(event)
-        // Adjust score back
         val match = db.matchDao().getMatchByIdOnce(event.matchId) ?: return
         when (event.eventType) {
             "GOAL", "PENALTY_GOAL" -> {
-                if (event.teamId == match.homeTeamId && match.homeScore > 0) {
-                    db.matchDao().updateMatch(match.copy(homeScore = match.homeScore - 1))
-                } else if (event.teamId == match.awayTeamId && match.awayScore > 0) {
-                    db.matchDao().updateMatch(match.copy(awayScore = match.awayScore - 1))
+                if (event.teamId == match.homeTeamId) {
+                    db.matchDao().updateMatch(match.copy(homeScore = (match.homeScore - 1).coerceAtLeast(0)))
+                } else if (event.teamId == match.awayTeamId) {
+                    db.matchDao().updateMatch(match.copy(awayScore = (match.awayScore - 1).coerceAtLeast(0)))
                 }
             }
             "OWN_GOAL" -> {
-                if (event.teamId == match.homeTeamId && match.awayScore > 0) {
-                    db.matchDao().updateMatch(match.copy(awayScore = match.awayScore - 1))
-                } else if (event.teamId == match.awayTeamId && match.homeScore > 0) {
-                    db.matchDao().updateMatch(match.copy(homeScore = match.homeScore - 1))
+                if (event.teamId == match.homeTeamId) {
+                    db.matchDao().updateMatch(match.copy(awayScore = (match.awayScore - 1).coerceAtLeast(0)))
+                } else if (event.teamId == match.awayTeamId) {
+                    db.matchDao().updateMatch(match.copy(homeScore = (match.homeScore - 1).coerceAtLeast(0)))
                 }
             }
         }
     }
 
-    // --- JSON Backup Export / Import ---
+    suspend fun generateRoundRobinFixture(tournamentId: Long): List<Match> {
+        val teams = db.teamDao().getTeamsForTournamentOnce(tournamentId)
+        if (teams.size < 2) return emptyList()
+
+        val createdMatches = mutableListOf<Match>()
+        val n = teams.size
+        var roundCount = 1
+
+        for (i in 0 until n) {
+            for (j in i + 1 until n) {
+                val match = Match(
+                    tournamentId = tournamentId,
+                    homeTeamId = teams[i].id,
+                    awayTeamId = teams[j].id,
+                    roundName = "Jornada $roundCount",
+                    status = "SCHEDULED"
+                )
+                val id = db.matchDao().insertMatch(match)
+                createdMatches.add(match.copy(id = id))
+                roundCount++
+            }
+        }
+        return createdMatches
+    }
+
+    // --- Backup & Restore via JSON ---
     suspend fun exportDatabaseToJson(): String = withContext(Dispatchers.IO) {
         val root = JSONObject()
         root.put("app", "TheBiG")
-        root.put("version", 1)
         root.put("author", "Daniel (el Grande)")
+        root.put("version", 4)
         root.put("timestamp", System.currentTimeMillis())
 
-        val tournaments = db.tournamentDao().getAllTournamentsOnce()
-        val tournamentsArray = JSONArray()
-        for (t in tournaments) {
+        val tList = db.tournamentDao().getAllTournamentsOnce()
+        val tArr = JSONArray()
+        for (t in tList) {
             val obj = JSONObject()
             obj.put("id", t.id)
             obj.put("name", t.name)
@@ -148,280 +176,115 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
             obj.put("playersPerTeam", t.playersPerTeam)
             obj.put("matchDurationMinutes", t.matchDurationMinutes)
             obj.put("status", t.status)
-            obj.put("championTeamId", t.championTeamId ?: JSONObject.NULL)
-            obj.put("runnerUpTeamId", t.runnerUpTeamId ?: JSONObject.NULL)
-            obj.put("prizeChampionEnabled", t.prizeChampionEnabled)
+            obj.put("tournamentType", t.tournamentType)
+            obj.put("awardTiming", t.awardTiming)
             obj.put("prizeChampionAmount", t.prizeChampionAmount)
-            obj.put("prizeRunnerUpEnabled", t.prizeRunnerUpEnabled)
             obj.put("prizeRunnerUpAmount", t.prizeRunnerUpAmount)
-            obj.put("prizeTopScorerEnabled", t.prizeTopScorerEnabled)
             obj.put("prizeTopScorerAmount", t.prizeTopScorerAmount)
-            obj.put("prizeTopAssisterEnabled", t.prizeTopAssisterEnabled)
             obj.put("prizeTopAssisterAmount", t.prizeTopAssisterAmount)
-            obj.put("prizeBestGkEnabled", t.prizeBestGkEnabled)
             obj.put("prizeBestGkAmount", t.prizeBestGkAmount)
-            obj.put("minMatchesForBestGk", t.minMatchesForBestGk)
-            obj.put("createdAt", t.createdAt)
-            tournamentsArray.put(obj)
+            obj.put("prizeMvpAmount", t.prizeMvpAmount)
+            obj.put("yellowCardFine", t.yellowCardFine)
+            obj.put("redCardFine", t.redCardFine)
+            tArr.put(obj)
         }
-        root.put("tournaments", tournamentsArray)
+        root.put("tournaments", tArr)
 
-        val teams = db.teamDao().getAllTeamsOnce()
-        val teamsArray = JSONArray()
-        for (tm in teams) {
+        val teamList = db.teamDao().getAllTeamsOnce()
+        val teamArr = JSONArray()
+        for (team in teamList) {
             val obj = JSONObject()
-            obj.put("id", tm.id)
-            obj.put("name", tm.name)
-            obj.put("shortName", tm.shortName)
-            obj.put("shieldVectorIndex", tm.shieldVectorIndex)
-            obj.put("primaryColorHex", tm.primaryColorHex)
-            obj.put("secondaryColorHex", tm.secondaryColorHex)
-            obj.put("borderColorHex", tm.borderColorHex)
-            obj.put("customShieldUri", tm.customShieldUri ?: JSONObject.NULL)
-            obj.put("jerseyPattern", tm.jerseyPattern)
-            obj.put("goalkeeperColorHex", tm.goalkeeperColorHex)
-            obj.put("createdAt", tm.createdAt)
-            teamsArray.put(obj)
+            obj.put("id", team.id)
+            obj.put("name", team.name)
+            obj.put("shortName", team.shortName)
+            obj.put("shieldVectorIndex", team.shieldVectorIndex)
+            obj.put("primaryColorHex", team.primaryColorHex)
+            obj.put("secondaryColorHex", team.secondaryColorHex)
+            obj.put("borderColorHex", team.borderColorHex)
+            obj.put("jerseyPattern", team.jerseyPattern)
+            obj.put("goalkeeperColorHex", team.goalkeeperColorHex)
+            teamArr.put(obj)
         }
-        root.put("teams", teamsArray)
+        root.put("teams", teamArr)
 
-        val players = db.playerDao().getAllPlayersOnce()
-        val playersArray = JSONArray()
-        for (p in players) {
+        val playerList = db.playerDao().getAllPlayersOnce()
+        val playerArr = JSONArray()
+        for (p in playerList) {
             val obj = JSONObject()
             obj.put("id", p.id)
             obj.put("teamId", p.teamId)
             obj.put("name", p.name)
             obj.put("dorsal", p.dorsal)
             obj.put("isGoalkeeper", p.isGoalkeeper)
+            obj.put("isCaptain", p.isCaptain)
             obj.put("feePaid", p.feePaid)
-            obj.put("matchesPlayed", p.matchesPlayed)
-            obj.put("matchesAsGoalkeeper", p.matchesAsGoalkeeper)
-            obj.put("goalsConcededAsGk", p.goalsConcededAsGk)
-            obj.put("createdAt", p.createdAt)
-            playersArray.put(obj)
+            playerArr.put(obj)
         }
-        root.put("players", playersArray)
-
-        val crossRefs = db.tournamentTeamDao().getAllCrossRefsOnce()
-        val crossRefsArray = JSONArray()
-        for (cr in crossRefs) {
-            val obj = JSONObject()
-            obj.put("tournamentId", cr.tournamentId)
-            obj.put("teamId", cr.teamId)
-            obj.put("feePaid", cr.feePaid)
-            obj.put("enrolledAt", cr.enrolledAt)
-            crossRefsArray.put(obj)
-        }
-        root.put("tournamentTeams", crossRefsArray)
-
-        val matches = db.matchDao().getAllMatchesOnce()
-        val matchesArray = JSONArray()
-        for (m in matches) {
-            val obj = JSONObject()
-            obj.put("id", m.id)
-            obj.put("tournamentId", m.tournamentId)
-            obj.put("homeTeamId", m.homeTeamId)
-            obj.put("awayTeamId", m.awayTeamId)
-            obj.put("homeScore", m.homeScore)
-            obj.put("awayScore", m.awayScore)
-            obj.put("roundName", m.roundName)
-            obj.put("status", m.status)
-            obj.put("currentPeriod", m.currentPeriod)
-            obj.put("elapsedSeconds", m.elapsedSeconds)
-            obj.put("homePenalties", m.homePenalties ?: JSONObject.NULL)
-            obj.put("awayPenalties", m.awayPenalties ?: JSONObject.NULL)
-            obj.put("matchDate", m.matchDate)
-            obj.put("matchTime", m.matchTime)
-            obj.put("isKnockout", m.isKnockout)
-            obj.put("homeGoalkeeperPlayerId", m.homeGoalkeeperPlayerId ?: JSONObject.NULL)
-            obj.put("awayGoalkeeperPlayerId", m.awayGoalkeeperPlayerId ?: JSONObject.NULL)
-            obj.put("createdAt", m.createdAt)
-            matchesArray.put(obj)
-        }
-        root.put("matches", matchesArray)
-
-        val events = db.matchEventDao().getAllEventsOnce()
-        val eventsArray = JSONArray()
-        for (e in events) {
-            val obj = JSONObject()
-            obj.put("id", e.id)
-            obj.put("matchId", e.matchId)
-            obj.put("teamId", e.teamId)
-            obj.put("playerId", e.playerId ?: JSONObject.NULL)
-            obj.put("assistPlayerId", e.assistPlayerId ?: JSONObject.NULL)
-            obj.put("eventType", e.eventType)
-            obj.put("minute", e.minute)
-            obj.put("extraInfo", e.extraInfo)
-            obj.put("timestamp", e.timestamp)
-            eventsArray.put(obj)
-        }
-        root.put("matchEvents", eventsArray)
+        root.put("players", playerArr)
 
         root.toString(2)
     }
 
-    suspend fun importDatabaseFromJson(jsonContent: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun importDatabaseFromJson(jsonStr: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val root = JSONObject(jsonContent)
+            val root = JSONObject(jsonStr)
+            val tArr = root.optJSONArray("tournaments") ?: JSONArray()
+            val teamArr = root.optJSONArray("teams") ?: JSONArray()
+            val playerArr = root.optJSONArray("players") ?: JSONArray()
 
-            // Parse teams first
-            if (root.has("teams")) {
-                val array = root.getJSONArray("teams")
-                val list = mutableListOf<Team>()
-                for (i in 0 until array.length()) {
-                    val o = array.getJSONObject(i)
-                    list.add(
-                        Team(
-                            id = o.optLong("id", 0),
-                            name = o.getString("name"),
-                            shortName = o.optString("shortName", ""),
-                            shieldVectorIndex = o.optInt("shieldVectorIndex", 0),
-                            primaryColorHex = o.optString("primaryColorHex", "#F59E0B"),
-                            secondaryColorHex = o.optString("secondaryColorHex", "#0F172A"),
-                            borderColorHex = o.optString("borderColorHex", "#FFFFFF"),
-                            customShieldUri = if (o.isNull("customShieldUri")) null else o.optString("customShieldUri"),
-                            jerseyPattern = o.optString("jerseyPattern", "SOLID"),
-                            goalkeeperColorHex = o.optString("goalkeeperColorHex", "#10B981"),
-                            createdAt = o.optLong("createdAt", System.currentTimeMillis())
-                        )
-                    )
-                }
-                db.teamDao().insertAllTeams(list)
+            for (i in 0 until tArr.length()) {
+                val obj = tArr.getJSONObject(i)
+                val t = Tournament(
+                    id = obj.optLong("id", 0),
+                    name = obj.getString("name"),
+                    edition = obj.optString("edition", "1"),
+                    entryFee = obj.optDouble("entryFee", 0.0),
+                    playersPerTeam = obj.optInt("playersPerTeam", 7),
+                    matchDurationMinutes = obj.optInt("matchDurationMinutes", 20),
+                    status = obj.optString("status", "PLANNING"),
+                    tournamentType = obj.optString("tournamentType", "LEAGUE"),
+                    awardTiming = obj.optString("awardTiming", "END_OF_LEAGUE"),
+                    prizeChampionAmount = obj.optDouble("prizeChampionAmount", 0.0),
+                    prizeRunnerUpAmount = obj.optDouble("prizeRunnerUpAmount", 0.0),
+                    prizeTopScorerAmount = obj.optDouble("prizeTopScorerAmount", 0.0),
+                    prizeTopAssisterAmount = obj.optDouble("prizeTopAssisterAmount", 0.0),
+                    prizeBestGkAmount = obj.optDouble("prizeBestGkAmount", 0.0),
+                    prizeMvpAmount = obj.optDouble("prizeMvpAmount", 0.0),
+                    yellowCardFine = obj.optDouble("yellowCardFine", 5.0),
+                    redCardFine = obj.optDouble("redCardFine", 10.0)
+                )
+                db.tournamentDao().insertTournament(t)
             }
 
-            // Parse players
-            if (root.has("players")) {
-                val array = root.getJSONArray("players")
-                val list = mutableListOf<Player>()
-                for (i in 0 until array.length()) {
-                    val o = array.getJSONObject(i)
-                    list.add(
-                        Player(
-                            id = o.optLong("id", 0),
-                            teamId = o.getLong("teamId"),
-                            name = o.getString("name"),
-                            dorsal = o.optInt("dorsal", 1),
-                            isGoalkeeper = o.optBoolean("isGoalkeeper", false),
-                            feePaid = o.optBoolean("feePaid", false),
-                            matchesPlayed = o.optInt("matchesPlayed", 0),
-                            matchesAsGoalkeeper = o.optInt("matchesAsGoalkeeper", 0),
-                            goalsConcededAsGk = o.optInt("goalsConcededAsGk", 0),
-                            createdAt = o.optLong("createdAt", System.currentTimeMillis())
-                        )
-                    )
-                }
-                db.playerDao().insertAllPlayers(list)
+            for (i in 0 until teamArr.length()) {
+                val obj = teamArr.getJSONObject(i)
+                val tm = Team(
+                    id = obj.optLong("id", 0),
+                    name = obj.getString("name"),
+                    shortName = obj.optString("shortName", "BIG"),
+                    shieldVectorIndex = obj.optInt("shieldVectorIndex", 0),
+                    primaryColorHex = obj.optString("primaryColorHex", "#F59E0B"),
+                    secondaryColorHex = obj.optString("secondaryColorHex", "#0F172A"),
+                    borderColorHex = obj.optString("borderColorHex", "#FFFFFF"),
+                    jerseyPattern = obj.optString("jerseyPattern", "SOLID"),
+                    goalkeeperColorHex = obj.optString("goalkeeperColorHex", "#10B981")
+                )
+                db.teamDao().insertTeam(tm)
             }
 
-            // Parse tournaments
-            if (root.has("tournaments")) {
-                val array = root.getJSONArray("tournaments")
-                val list = mutableListOf<Tournament>()
-                for (i in 0 until array.length()) {
-                    val o = array.getJSONObject(i)
-                    list.add(
-                        Tournament(
-                            id = o.optLong("id", 0),
-                            name = o.getString("name"),
-                            edition = o.optString("edition", "1"),
-                            entryFee = o.optDouble("entryFee", 0.0),
-                            playersPerTeam = o.optInt("playersPerTeam", 7),
-                            matchDurationMinutes = o.optInt("matchDurationMinutes", 20),
-                            status = o.optString("status", "PLANNING"),
-                            championTeamId = if (o.isNull("championTeamId")) null else o.optLong("championTeamId"),
-                            runnerUpTeamId = if (o.isNull("runnerUpTeamId")) null else o.optLong("runnerUpTeamId"),
-                            prizeChampionEnabled = o.optBoolean("prizeChampionEnabled", true),
-                            prizeChampionAmount = o.optDouble("prizeChampionAmount", 0.0),
-                            prizeRunnerUpEnabled = o.optBoolean("prizeRunnerUpEnabled", true),
-                            prizeRunnerUpAmount = o.optDouble("prizeRunnerUpAmount", 0.0),
-                            prizeTopScorerEnabled = o.optBoolean("prizeTopScorerEnabled", true),
-                            prizeTopScorerAmount = o.optDouble("prizeTopScorerAmount", 0.0),
-                            prizeTopAssisterEnabled = o.optBoolean("prizeTopAssisterEnabled", true),
-                            prizeTopAssisterAmount = o.optDouble("prizeTopAssisterAmount", 0.0),
-                            prizeBestGkEnabled = o.optBoolean("prizeBestGkEnabled", true),
-                            prizeBestGkAmount = o.optDouble("prizeBestGkAmount", 0.0),
-                            minMatchesForBestGk = o.optInt("minMatchesForBestGk", 2),
-                            createdAt = o.optLong("createdAt", System.currentTimeMillis())
-                        )
-                    )
-                }
-                db.tournamentDao().insertAllTournaments(list)
+            for (i in 0 until playerArr.length()) {
+                val obj = playerArr.getJSONObject(i)
+                val p = Player(
+                    id = obj.optLong("id", 0),
+                    teamId = obj.getLong("teamId"),
+                    name = obj.getString("name"),
+                    dorsal = obj.getInt("dorsal"),
+                    isGoalkeeper = obj.optBoolean("isGoalkeeper", false),
+                    isCaptain = obj.optBoolean("isCaptain", false),
+                    feePaid = obj.optBoolean("feePaid", false)
+                )
+                db.playerDao().insertPlayer(p)
             }
-
-            // Parse tournament teams
-            if (root.has("tournamentTeams")) {
-                val array = root.getJSONArray("tournamentTeams")
-                val list = mutableListOf<TournamentTeamCrossRef>()
-                for (i in 0 until array.length()) {
-                    val o = array.getJSONObject(i)
-                    list.add(
-                        TournamentTeamCrossRef(
-                            tournamentId = o.getLong("tournamentId"),
-                            teamId = o.getLong("teamId"),
-                            feePaid = o.optBoolean("feePaid", false),
-                            enrolledAt = o.optLong("enrolledAt", System.currentTimeMillis())
-                        )
-                    )
-                }
-                db.tournamentTeamDao().insertAllCrossRefs(list)
-            }
-
-            // Parse matches
-            if (root.has("matches")) {
-                val array = root.getJSONArray("matches")
-                val list = mutableListOf<Match>()
-                for (i in 0 until array.length()) {
-                    val o = array.getJSONObject(i)
-                    list.add(
-                        Match(
-                            id = o.optLong("id", 0),
-                            tournamentId = o.getLong("tournamentId"),
-                            homeTeamId = o.getLong("homeTeamId"),
-                            awayTeamId = o.getLong("awayTeamId"),
-                            homeScore = o.optInt("homeScore", 0),
-                            awayScore = o.optInt("awayScore", 0),
-                            roundName = o.optString("roundName", "Jornada 1"),
-                            status = o.optString("status", "SCHEDULED"),
-                            currentPeriod = o.optString("currentPeriod", "NO_INICIADO"),
-                            elapsedSeconds = o.optInt("elapsedSeconds", 0),
-                            homePenalties = if (o.isNull("homePenalties")) null else o.optInt("homePenalties"),
-                            awayPenalties = if (o.isNull("awayPenalties")) null else o.optInt("awayPenalties"),
-                            matchDate = o.optString("matchDate", ""),
-                            matchTime = o.optString("matchTime", ""),
-                            isKnockout = o.optBoolean("isKnockout", false),
-                            homeGoalkeeperPlayerId = if (o.isNull("homeGoalkeeperPlayerId")) null else o.optLong("homeGoalkeeperPlayerId"),
-                            awayGoalkeeperPlayerId = if (o.isNull("awayGoalkeeperPlayerId")) null else o.optLong("awayGoalkeeperPlayerId"),
-                            createdAt = o.optLong("createdAt", System.currentTimeMillis())
-                        )
-                    )
-                }
-                db.matchDao().insertAllMatches(list)
-            }
-
-            // Parse match events
-            if (root.has("matchEvents")) {
-                val array = root.getJSONArray("matchEvents")
-                val list = mutableListOf<MatchEvent>()
-                for (i in 0 until array.length()) {
-                    val o = array.getJSONObject(i)
-                    list.add(
-                        MatchEvent(
-                            id = o.optLong("id", 0),
-                            matchId = o.getLong("matchId"),
-                            teamId = o.getLong("teamId"),
-                            playerId = if (o.isNull("playerId")) null else o.optLong("playerId"),
-                            assistPlayerId = if (o.isNull("assistPlayerId")) null else o.optLong("assistPlayerId"),
-                            eventType = o.getString("eventType"),
-                            minute = o.optInt("minute", 0),
-                            extraInfo = o.optString("extraInfo", ""),
-                            timestamp = o.optLong("timestamp", System.currentTimeMillis())
-                        )
-                    )
-                }
-                db.matchEventDao().insertAllEvents(list)
-            }
-
             true
         } catch (e: Exception) {
             e.printStackTrace()

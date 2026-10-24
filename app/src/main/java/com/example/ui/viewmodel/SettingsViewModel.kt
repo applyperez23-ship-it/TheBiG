@@ -10,6 +10,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+data class RemoteBroadcastNotice(
+    val title: String,
+    val message: String,
+    val isSurvey: Boolean = false,
+    val options: List<String> = emptyList(),
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 class SettingsViewModel(
     private val repository: TheBiGRepository,
     private val context: Context
@@ -23,6 +31,21 @@ class SettingsViewModel(
     private val _isDarkMode = MutableStateFlow(prefs.getBoolean("dark_mode", true))
     val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
 
+    // Performance Saving Mode: "Descargar/Optimizar Animaciones"
+    private val _isPowerSavingMode = MutableStateFlow(prefs.getBoolean("power_saving_mode", false))
+    val isPowerSavingMode: StateFlow<Boolean> = _isPowerSavingMode.asStateFlow()
+
+    // Hidden Developer Mode APK URL
+    private val _apkDownloadUrl = MutableStateFlow(
+        prefs.getString("apk_download_url", "https://thebig.app/download/app-latest.apk")
+            ?: "https://thebig.app/download/app-latest.apk"
+    )
+    val apkDownloadUrl: StateFlow<String> = _apkDownloadUrl.asStateFlow()
+
+    // Remote Broadcaster State
+    private val _activeBroadcast = MutableStateFlow<RemoteBroadcastNotice?>(null)
+    val activeBroadcast: StateFlow<RemoteBroadcastNotice?> = _activeBroadcast.asStateFlow()
+
     private val _backupStatus = MutableStateFlow<String?>(null)
     val backupStatus: StateFlow<String?> = _backupStatus.asStateFlow()
 
@@ -34,6 +57,25 @@ class SettingsViewModel(
     fun toggleDarkMode(enabled: Boolean) {
         prefs.edit().putBoolean("dark_mode", enabled).apply()
         _isDarkMode.value = enabled
+    }
+
+    fun togglePowerSavingMode(enabled: Boolean) {
+        prefs.edit().putBoolean("power_saving_mode", enabled).apply()
+        _isPowerSavingMode.value = enabled
+    }
+
+    fun setApkDownloadUrl(newUrl: String) {
+        prefs.edit().putString("apk_download_url", newUrl).apply()
+        _apkDownloadUrl.value = newUrl
+    }
+
+    fun broadcastNotice(title: String, message: String, isSurvey: Boolean = false, options: List<String> = emptyList()) {
+        val notice = RemoteBroadcastNotice(title, message, isSurvey, options)
+        _activeBroadcast.value = notice
+    }
+
+    fun dismissBroadcast() {
+        _activeBroadcast.value = null
     }
 
     fun exportBackup(onReady: (String) -> Unit) {

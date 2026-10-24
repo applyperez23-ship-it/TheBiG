@@ -18,13 +18,13 @@ import androidx.room.PrimaryKey
             entity = Team::class,
             parentColumns = ["id"],
             childColumns = ["homeTeamId"],
-            onDelete = ForeignKey.RESTRICT
+            onDelete = ForeignKey.CASCADE
         ),
         ForeignKey(
             entity = Team::class,
             parentColumns = ["id"],
             childColumns = ["awayTeamId"],
-            onDelete = ForeignKey.RESTRICT
+            onDelete = ForeignKey.CASCADE
         )
     ],
     indices = [Index("tournamentId"), Index("homeTeamId"), Index("awayTeamId")]
@@ -35,18 +35,14 @@ data class Match(
     val tournamentId: Long,
     val homeTeamId: Long,
     val awayTeamId: Long,
+    val roundName: String = "Jornada 1",
     val homeScore: Int = 0,
     val awayScore: Int = 0,
-    val roundName: String = "Jornada 1", // "Jornada 1", "Cuartos", "Semifinal", "Final", etc.
-    val status: String = "SCHEDULED", // SCHEDULED, LIVE, FINISHED
-    val currentPeriod: String = "NO_INICIADO", // NO_INICIADO, PRIMER_TIEMPO, DESCANSO, SEGUNDO_TIEMPO, TIEMPO_EXTRA, PENALTIS, FINALIZADO
-    val elapsedSeconds: Int = 0,
     val homePenalties: Int? = null,
     val awayPenalties: Int? = null,
-    val matchDate: String = "",
-    val matchTime: String = "",
-    val isKnockout: Boolean = false,
-    val homeGoalkeeperPlayerId: Long? = null,
-    val awayGoalkeeperPlayerId: Long? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val status: String = "SCHEDULED", // SCHEDULED, LIVE, PAUSED, FINISHED
+    val currentPeriod: String = "FIRST_HALF", // FIRST_HALF, HALF_TIME, SECOND_HALF, EXTRA_TIME, PENALTIES
+    val elapsedSeconds: Int = 0,
+    val mvpPlayerId: Long? = null,
+    val scheduledTimestamp: Long = System.currentTimeMillis()
 )

@@ -53,7 +53,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             val isDarkMode by settingsViewModel.isDarkMode.collectAsStateWithLifecycle()
 
-            // Request Notification Permission on Android 13+ for Foreground Match Timer Service
             val permissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestPermission()
             ) { /* Granted or dismissed */ }

@@ -3,264 +3,174 @@ package com.example.service
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.example.MainActivity
-import com.example.R
-import com.example.data.local.TheBiGDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+data class LiveTimerState(
+    val matchId: Long = 0,
+    val homeTeamName: String = "",
+    val awayTeamName: String = "",
+    val elapsedSeconds: Int = 0,
+    val totalDurationMinutes: Int = 20,
+    val isRunning: Boolean = false,
+    val currentPeriod: String = "FIRST_HALF" // FIRST_HALF, HALF_TIME, SECOND_HALF, EXTRA_TIME, PENALTIES
+) {
+    val remainingSeconds: Int
+        get() = ((totalDurationMinutes * 60) - elapsedSeconds).coerceAtLeast(0)
+
+    val formattedElapsed: String
+        get() = "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60)
+
+    val formattedRemaining: String
+        get() = "%02d:%02d".format(remainingSeconds / 60, remainingSeconds % 60)
+
+    val formattedTotal: String
+        get() = "%02d:00".format(totalDurationMinutes)
+
+    /**
+     * Complete requested clock format: "04:37 / 20:00 - Restan 15:23"
+     */
+    val fullClockDisplay: String
+        get() = "$formattedElapsed / $formattedTotal - Restan $formattedRemaining"
+}
 
 class MatchTimerService : Service() {
 
-    private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
-    private var tickerJob: Job? = null
-    private lateinit var notificationManager: NotificationManager
-    private val notificationId = 1001
-    private val channelId = "thebig_match_timer_channel"
+    private val scope = CoroutineScope(Dispatchers.Default + Job())
+    private var timerJob: Job? = null
+    private val notificationManager by lazy { getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager }
+
+    override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action ?: ACTION_START
+        val action = intent?.action ?: return START_NOT_STICKY
+
         when (action) {
             ACTION_START -> {
-                val matchId = intent?.getLongExtra(EXTRA_MATCH_ID, 0L) ?: 0L
-                val homeName = intent?.getStringExtra(EXTRA_HOME_NAME) ?: "Local"
-                val awayName = intent?.getStringExtra(EXTRA_AWAY_NAME) ?: "Visitante"
-                val homeScore = intent?.getIntExtra(EXTRA_HOME_SCORE, 0) ?: 0
-                val awayScore = intent?.getIntExtra(EXTRA_AWAY_SCORE, 0) ?: 0
-                val period = intent?.getStringExtra(EXTRA_PERIOD) ?: "PRIMER_TIEMPO"
-                val elapsed = intent?.getIntExtra(EXTRA_ELAPSED, 0) ?: 0
+                val matchId = intent.getLongExtra(EXTRA_MATCH_ID, 0)
+                val home = intent.getStringExtra(EXTRA_HOME_NAME) ?: ""
+                val away = intent.getStringExtra(EXTRA_AWAY_NAME) ?: ""
+                val duration = intent.getIntExtra(EXTRA_DURATION, 20)
+                val elapsed = intent.getIntExtra(EXTRA_ELAPSED, 0)
+                val period = intent.getStringExtra(EXTRA_PERIOD) ?: "FIRST_HALF"
 
-                MatchTimerManager.updateState(
-                    MatchTimerState(
-                        matchId = matchId,
-                        homeTeamName = homeName,
-                        awayTeamName = awayName,
-                        homeScore = homeScore,
-                        awayScore = awayScore,
-                        period = period,
-                        elapsedSeconds = elapsed,
-                        isRunning = true
-                    )
+                _timerState.value = LiveTimerState(
+                    matchId = matchId,
+                    homeTeamName = home,
+                    awayTeamName = away,
+                    totalDurationMinutes = duration,
+                    elapsedSeconds = elapsed,
+                    isRunning = true,
+                    currentPeriod = period
                 )
-
-                startForegroundServiceWithNotification()
-                startTicker()
+                startForeground(NOTIFICATION_ID, buildNotification(_timerState.value))
+                startTimer()
             }
             ACTION_PAUSE -> {
-                MatchTimerManager.setRunning(false)
-                updateNotification()
+                pauseTimer()
             }
             ACTION_RESUME -> {
-                MatchTimerManager.setRunning(true)
-                updateNotification()
+                resumeTimer()
             }
             ACTION_STOP -> {
-                stopTicker()
+                stopTimer()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         }
-        return START_STICKY
+
+        return START_NOT_STICKY
     }
 
-    private fun startForegroundServiceWithNotification() {
-        val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                notificationId,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            )
-        } else {
-            startForeground(notificationId, notification)
-        }
-    }
-
-    private fun startTicker() {
-        tickerJob?.cancel()
-        tickerJob = serviceScope.launch {
-            var counter = 0
-            while (isActive) {
+    private fun startTimer() {
+        timerJob?.cancel()
+        timerJob = scope.launch {
+            while (_timerState.value.isRunning) {
                 delay(1000)
-                MatchTimerManager.tick()
-                counter++
-                // Update notification every second
-                updateNotification()
-
-                // Save elapsed time to Room DB every 5 seconds
-                if (counter % 5 == 0) {
-                    val current = MatchTimerManager.timerState.value
-                    if (current.matchId > 0) {
-                        try {
-                            val db = TheBiGDatabase.getDatabase(applicationContext)
-                            val match = db.matchDao().getMatchByIdOnce(current.matchId)
-                            if (match != null) {
-                                db.matchDao().updateMatch(
-                                    match.copy(
-                                        elapsedSeconds = current.elapsedSeconds,
-                                        homeScore = current.homeScore,
-                                        awayScore = current.awayScore,
-                                        currentPeriod = current.period
-                                    )
-                                )
-                            }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    }
-                }
+                val current = _timerState.value
+                val newElapsed = current.elapsedSeconds + 1
+                _timerState.value = current.copy(elapsedSeconds = newElapsed)
+                notificationManager.notify(NOTIFICATION_ID, buildNotification(_timerState.value))
             }
         }
     }
 
-    private fun stopTicker() {
-        tickerJob?.cancel()
-        tickerJob = null
+    private fun pauseTimer() {
+        timerJob?.cancel()
+        _timerState.value = _timerState.value.copy(isRunning = false)
+        notificationManager.notify(NOTIFICATION_ID, buildNotification(_timerState.value))
     }
 
-    private fun buildNotification(): Notification {
-        val state = MatchTimerManager.timerState.value
-        val openIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val periodLabel = formatPeriodLabel(state.period)
-        val title = "${state.homeTeamName} ${state.homeScore} - ${state.awayScore} ${state.awayTeamName}"
-        val text = "Tiempo: ${state.formattedTime} | $periodLabel"
-
-        return NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setOngoing(state.isRunning)
-            .setOnlyAlertOnce(true)
-            .setContentIntent(pendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .build()
+    private fun resumeTimer() {
+        _timerState.value = _timerState.value.copy(isRunning = true)
+        startTimer()
     }
 
-    private fun updateNotification() {
-        notificationManager.notify(notificationId, buildNotification())
-    }
-
-    private fun formatPeriodLabel(period: String): String {
-        return when (period) {
-            "PRIMER_TIEMPO" -> "1T"
-            "DESCANSO" -> "Descanso"
-            "SEGUNDO_TIEMPO" -> "2T"
-            "TIEMPO_EXTRA_1" -> "1TE"
-            "TIEMPO_EXTRA_2" -> "2TE"
-            "PENALTIS" -> "Penaltis"
-            "FINALIZADO" -> "Final"
-            else -> period
-        }
+    private fun stopTimer() {
+        timerJob?.cancel()
+        _timerState.value = _timerState.value.copy(isRunning = false)
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                channelId,
-                "TheBiG Cronometro de Partido",
+                CHANNEL_ID,
+                "TheBiG Cronómetro de Partido",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Muestra el tiempo y marcador en vivo durante el partido"
-                setShowBadge(false)
+                description = "Cronómetro oficial de partido en vivo de TheBiG"
             }
             notificationManager.createNotificationChannel(channel)
         }
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    private fun buildNotification(state: LiveTimerState): Notification {
+        val title = "${state.homeTeamName} vs ${state.awayTeamName}"
+        val content = "${state.fullClockDisplay} (${state.currentPeriod})"
 
-    override fun onDestroy() {
-        super.onDestroy()
-        stopTicker()
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(content)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setOngoing(state.isRunning)
+            .setOnlyAlertOnce(true)
+            .build()
     }
 
     companion object {
+        const val CHANNEL_ID = "thebig_match_timer_channel"
+        const val NOTIFICATION_ID = 1001
+
         const val ACTION_START = "com.example.service.ACTION_START"
         const val ACTION_PAUSE = "com.example.service.ACTION_PAUSE"
         const val ACTION_RESUME = "com.example.service.ACTION_RESUME"
         const val ACTION_STOP = "com.example.service.ACTION_STOP"
 
-        const val EXTRA_MATCH_ID = "EXTRA_MATCH_ID"
-        const val EXTRA_HOME_NAME = "EXTRA_HOME_NAME"
-        const val EXTRA_AWAY_NAME = "EXTRA_AWAY_NAME"
-        const val EXTRA_HOME_SCORE = "EXTRA_HOME_SCORE"
-        const val EXTRA_AWAY_SCORE = "EXTRA_AWAY_SCORE"
-        const val EXTRA_PERIOD = "EXTRA_PERIOD"
-        const val EXTRA_ELAPSED = "EXTRA_ELAPSED"
+        const val EXTRA_MATCH_ID = "extra_match_id"
+        const val EXTRA_HOME_NAME = "extra_home_name"
+        const val EXTRA_AWAY_NAME = "extra_away_name"
+        const val EXTRA_DURATION = "extra_duration"
+        const val EXTRA_ELAPSED = "extra_elapsed"
+        const val EXTRA_PERIOD = "extra_period"
 
-        fun start(
-            context: Context,
-            matchId: Long,
-            homeName: String,
-            awayName: String,
-            homeScore: Int,
-            awayScore: Int,
-            period: String,
-            elapsed: Int
-        ) {
-            val intent = Intent(context, MatchTimerService::class.java).apply {
-                action = ACTION_START
-                putExtra(EXTRA_MATCH_ID, matchId)
-                putExtra(EXTRA_HOME_NAME, homeName)
-                putExtra(EXTRA_AWAY_NAME, awayName)
-                putExtra(EXTRA_HOME_SCORE, homeScore)
-                putExtra(EXTRA_AWAY_SCORE, awayScore)
-                putExtra(EXTRA_PERIOD, period)
-                putExtra(EXTRA_ELAPSED, elapsed)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
-        }
-
-        fun pause(context: Context) {
-            val intent = Intent(context, MatchTimerService::class.java).apply {
-                action = ACTION_PAUSE
-            }
-            context.startService(intent)
-        }
-
-        fun resume(context: Context) {
-            val intent = Intent(context, MatchTimerService::class.java).apply {
-                action = ACTION_RESUME
-            }
-            context.startService(intent)
-        }
-
-        fun stop(context: Context) {
-            val intent = Intent(context, MatchTimerService::class.java).apply {
-                action = ACTION_STOP
-            }
-            context.startService(intent)
-        }
+        private val _timerState = MutableStateFlow(LiveTimerState())
+        val timerState: StateFlow<LiveTimerState> = _timerState.asStateFlow()
     }
 }

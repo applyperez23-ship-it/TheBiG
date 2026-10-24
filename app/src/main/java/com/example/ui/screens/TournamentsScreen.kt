@@ -35,6 +35,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,7 +46,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -59,8 +59,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.local.entity.AwardTimingModes
 import com.example.data.local.entity.Tournament
+import com.example.data.local.entity.TournamentModes
 import com.example.ui.components.DeleteConfirmationDialog
+import com.example.ui.components.TheBiGLogo
 import com.example.ui.viewmodel.TournamentViewModel
 import kotlinx.coroutines.launch
 
@@ -99,22 +102,17 @@ fun TournamentsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        Icons.Default.EmojiEvents,
-                        contentDescription = null,
-                        modifier = Modifier.size(72.dp),
-                        tint = MaterialTheme.colorScheme.outline
-                    )
+                    TheBiGLogo(size = 64.dp, showText = false)
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "No hay torneos creados",
+                        text = "No hay torneos registrados",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Toca el botón + para registrar un torneo, configurar premios y generar partidos.",
+                        text = "Instalación limpia sin datos de prueba. Toca el botón '+' para registrar tu primer torneo, configurar premios y reglas.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -124,9 +122,25 @@ fun TournamentsScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TheBiGLogo(size = 32.dp, showText = true)
+                            Text(
+                                text = "${tournaments.size} Torneo(s)",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
                     items(tournaments, key = { it.id }) { tournament ->
                         TournamentCard(
                             tournament = tournament,
@@ -142,7 +156,7 @@ fun TournamentsScreen(
     if (showCreateDialog) {
         CreateTournamentDialog(
             onDismiss = { showCreateDialog = false },
-            onConfirm = { name, edition, fee, playersCount, durationMin, ch, ru, sc, asst, gk, minGk ->
+            onConfirm = { name, edition, fee, playersCount, durationMin, mode, timing, ch, ru, sc, asst, gk, mvp, yellowF, redF, minGk ->
                 scope.launch {
                     val id = viewModel.createTournament(
                         name = name,
@@ -150,11 +164,16 @@ fun TournamentsScreen(
                         entryFee = fee,
                         playersPerTeam = playersCount,
                         matchDurationMinutes = durationMin,
+                        tournamentType = mode,
+                        awardTiming = timing,
                         prizeChampion = ch,
                         prizeRunnerUp = ru,
                         prizeScorer = sc,
                         prizeAssister = asst,
                         prizeBestGk = gk,
+                        prizeMvp = mvp,
+                        yellowCardFine = yellowF,
+                        redCardFine = redF,
                         minMatchesGk = minGk
                     )
                     showCreateDialog = false
@@ -212,33 +231,30 @@ private fun TournamentCard(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Edición ${tournament.edition} • Estado: ${formatStatus(tournament.status)}",
+                    text = "Edición ${tournament.edition} • Modo: ${formatModeName(tournament.tournamentType)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (tournament.entryFee > 0) {
                         Text(
-                            text = "Equipo: $${tournament.entryFee}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Jugador: $${"%.2f".format(tournament.feePerPlayer)}",
+                            text = "$${tournament.entryFee.toInt()}/equipo",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold
                         )
+                        Text(
+                            text = "($${tournament.feePerPlayer.toInt()}/jugador)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
                     }
-                    Text(
-                        text = "${tournament.playersPerTeam} vs ${tournament.playersPerTeam}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
                 }
             }
-            IconButton(onClick = onDelete) {
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.testTag("delete_tournament_button_${tournament.id}")
+            ) {
                 Icon(
                     Icons.Default.Delete,
                     contentDescription = "Eliminar torneo",
@@ -249,12 +265,13 @@ private fun TournamentCard(
     }
 }
 
-private fun formatStatus(status: String): String {
-    return when (status) {
-        "PLANNING" -> "Planificación"
-        "IN_PROGRESS" -> "En Juego"
-        "FINISHED" -> "Finalizado"
-        else -> status
+private fun formatModeName(mode: String): String {
+    return when (mode) {
+        TournamentModes.LEAGUE -> "Liga Tradicional"
+        TournamentModes.CUP -> "Copa (Eliminatoria)"
+        TournamentModes.GROUPS_CUP -> "Grupos + Copa"
+        TournamentModes.MIXED -> "Modo Mixto"
+        else -> mode
     }
 }
 
@@ -267,22 +284,28 @@ private fun CreateTournamentDialog(
         fee: Double,
         playersPerTeam: Int,
         matchDurationMinutes: Int,
+        tournamentType: String,
+        awardTiming: String,
         championPrize: Double,
         runnerUpPrize: Double,
         scorerPrize: Double,
         assisterPrize: Double,
         bestGkPrize: Double,
+        mvpPrize: Double,
+        yellowCardFine: Double,
+        redCardFine: Double,
         minGkMatches: Int
     ) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var edition by remember { mutableStateOf("1") }
+    var tournamentType by remember { mutableStateOf(TournamentModes.LEAGUE) }
+    var awardTiming by remember { mutableStateOf(AwardTimingModes.END_OF_LEAGUE) }
     var playersPerTeamStr by remember { mutableStateOf("7") }
     var entryFeeTeamStr by remember { mutableStateOf("70") }
     var feePerPlayerStr by remember { mutableStateOf("10") }
     var matchDurationStr by remember { mutableStateOf("20") }
 
-    // Collapsible accordion state for Prizes & Rules (starts collapsed)
     var isRulesExpanded by remember { mutableStateOf(false) }
 
     var prizeChampion by remember { mutableStateOf("0") }
@@ -290,9 +313,11 @@ private fun CreateTournamentDialog(
     var prizeScorer by remember { mutableStateOf("0") }
     var prizeAssister by remember { mutableStateOf("0") }
     var prizeBestGk by remember { mutableStateOf("0") }
+    var prizeMvp by remember { mutableStateOf("0") }
+    var yellowCardFineStr by remember { mutableStateOf("5") }
+    var redCardFineStr by remember { mutableStateOf("10") }
     var minGkMatches by remember { mutableStateOf("2") }
 
-    // Smart financial link helper
     fun onTeamFeeChanged(newTeamFeeStr: String) {
         entryFeeTeamStr = newTeamFeeStr
         val teamVal = newTeamFeeStr.toDoubleOrNull()
@@ -340,7 +365,6 @@ private fun CreateTournamentDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Section 1: Basic Information
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -350,6 +374,73 @@ private fun CreateTournamentDialog(
                         .fillMaxWidth()
                         .testTag("tournament_name_input")
                 )
+
+                Text(
+                    text = "Modo de Torneo:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = tournamentType == TournamentModes.LEAGUE,
+                            onClick = { tournamentType = TournamentModes.LEAGUE },
+                            label = { Text("Liga Tradicional", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = tournamentType == TournamentModes.CUP,
+                            onClick = { tournamentType = TournamentModes.CUP },
+                            label = { Text("Copa (K.O.)", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = tournamentType == TournamentModes.GROUPS_CUP,
+                            onClick = { tournamentType = TournamentModes.GROUPS_CUP },
+                            label = { Text("Grupos + Copa", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = tournamentType == TournamentModes.MIXED,
+                            onClick = { tournamentType = TournamentModes.MIXED },
+                            label = { Text("Modo Mixto", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Momento de Premiación Individual:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = awardTiming == AwardTimingModes.END_OF_LEAGUE,
+                        onClick = { awardTiming = AwardTimingModes.END_OF_LEAGUE },
+                        label = { Text("Al terminar Liga", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = awardTiming == AwardTimingModes.END_OF_CUP,
+                        onClick = { awardTiming = AwardTimingModes.END_OF_CUP },
+                        label = { Text("Al finalizar Copa", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -372,7 +463,6 @@ private fun CreateTournamentDialog(
                     )
                 }
 
-                // Section 2: Smart Financials (Two-way auto calculation)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -404,7 +494,6 @@ private fun CreateTournamentDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Section 3: Collapsible Accordion for Prizes and Rules
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -430,7 +519,7 @@ private fun CreateTournamentDialog(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Premios y Reglas",
+                                text = "Premios y Pozo de Sanciones",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -444,7 +533,6 @@ private fun CreateTournamentDialog(
                     }
                 }
 
-                // Expanded Compact 2-Column Grid for Prizes
                 AnimatedVisibility(
                     visible = isRulesExpanded,
                     enter = expandVertically() + fadeIn(),
@@ -513,12 +601,48 @@ private fun CreateTournamentDialog(
                             OutlinedTextField(
                                 value = minGkMatches,
                                 onValueChange = { minGkMatches = it },
-                                label = { Text("Mín. Partidos Portero") },
+                                label = { Text("Mín. PJ Portero") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
                         }
+
+                        Text(
+                            text = "Pozo de Sanciones (Financia Premio MVP):",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = yellowCardFineStr,
+                                onValueChange = { yellowCardFineStr = it },
+                                label = { Text("Multa T. Amarilla ($)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = redCardFineStr,
+                                onValueChange = { redCardFineStr = it },
+                                label = { Text("Multa T. Roja ($)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        OutlinedTextField(
+                            value = prizeMvp,
+                            onValueChange = { prizeMvp = it },
+                            label = { Text("Base Extra Premio MVP ($)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
@@ -530,17 +654,25 @@ private fun CreateTournamentDialog(
                         val finalFee = entryFeeTeamStr.toDoubleOrNull() ?: 0.0
                         val finalCount = playersPerTeamStr.toIntOrNull() ?: 7
                         val finalDuration = matchDurationStr.toIntOrNull() ?: 20
+                        val yellowF = yellowCardFineStr.toDoubleOrNull() ?: 5.0
+                        val redF = redCardFineStr.toDoubleOrNull() ?: 10.0
+                        val mvp = prizeMvp.toDoubleOrNull() ?: 0.0
                         onConfirm(
                             name,
                             edition,
                             finalFee,
                             finalCount,
                             finalDuration,
+                            tournamentType,
+                            awardTiming,
                             prizeChampion.toDoubleOrNull() ?: 0.0,
                             prizeRunnerUp.toDoubleOrNull() ?: 0.0,
                             prizeScorer.toDoubleOrNull() ?: 0.0,
                             prizeAssister.toDoubleOrNull() ?: 0.0,
                             prizeBestGk.toDoubleOrNull() ?: 0.0,
+                            mvp,
+                            yellowF,
+                            redF,
                             minGkMatches.toIntOrNull() ?: 2
                         )
                     }

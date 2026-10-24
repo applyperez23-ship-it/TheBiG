@@ -32,6 +32,12 @@ interface TournamentDao {
     @Query("DELETE FROM tournaments WHERE id = :id")
     suspend fun deleteTournamentById(id: Long)
 
+    @Query("UPDATE tournaments SET status = :status WHERE id = :id")
+    suspend fun updateTournamentStatus(id: Long, status: String)
+
+    @Query("UPDATE tournaments SET championTeamId = :champId, runnerUpTeamId = :runnerUpId WHERE id = :id")
+    suspend fun setChampion(id: Long, champId: Long, runnerUpId: Long?)
+
     @Query("SELECT * FROM tournaments")
     suspend fun getAllTournamentsOnce(): List<Tournament>
 

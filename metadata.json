@@ -1,6 +1,8 @@
 {
   "name": "TheBiG",
-  "description": "Gestor profesional de torneos de fútbol, estadísticas, finanzas y actas de partido en tiempo real creado por Daniel (el Grande)",
+  "description": "TheBiG - Aplicación nativa oficial de gestión de torneos de fútbol, actas arbitrales en vivo, control financiero por jugador y exportación de tarjetas en proporción 1:1, creada por Daniel (el Grande).",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
