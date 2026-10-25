@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 
@@ -18,7 +19,13 @@ import androidx.compose.ui.text.font.FontWeight
  */
 @Composable
 fun DeleteConfirmationDialog(
-    itemName: String,
+    itemName: String = "",
+    title: String = "Confirmar Eliminación",
+    message: String = if (itemName.isNotBlank()) {
+        "¿Estás seguro de que deseas eliminar permanentemente $itemName? Esta acción no se puede deshacer y borrará todos sus registros asociados."
+    } else {
+        "¿Estás seguro de realizar esta eliminación? Esta acción es irreversible."
+    },
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
@@ -33,13 +40,13 @@ fun DeleteConfirmationDialog(
         },
         title = {
             Text(
-                text = "Confirmar Eliminación",
+                text = title,
                 fontWeight = FontWeight.Bold
             )
         },
         text = {
             Text(
-                text = "¿Estás seguro de que deseas eliminar permanentemente $itemName? Esta acción no se puede deshacer y borrará todos sus registros asociados."
+                text = message
             )
         },
         confirmButton = {

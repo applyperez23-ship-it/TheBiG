@@ -470,4 +470,13 @@ object GraphicCardGenerator {
             e.printStackTrace()
         }
     }
+
+    fun generateStandingsInstagramBitmap(tournament: Tournament, standings: List<TeamStanding>): Bitmap =
+        generateStandingsBitmap(tournament, standings)
+
+    fun generateFixtureInstagramBitmap(tournament: Tournament, matches: List<Match>, teamMap: Map<Long, Team>): Bitmap =
+        generateFixtureBitmap(tournament, matches, teamMap.values.toList())
+
+    fun generateScorersInstagramBitmap(tournament: Tournament, scorers: List<ScorerStat>): Bitmap =
+        generateScorersBitmap(tournament, scorers)
 }

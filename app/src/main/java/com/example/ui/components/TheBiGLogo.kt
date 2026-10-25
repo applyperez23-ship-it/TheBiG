@@ -97,3 +97,15 @@ fun TheBiGLogo(
         }
     }
 }
+
+@Composable
+fun TheBiGLogoVector(
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp
+) {
+    TheBiGLogo(
+        modifier = modifier,
+        size = size,
+        showText = false
+    )
+}

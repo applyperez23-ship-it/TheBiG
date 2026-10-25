@@ -1,7 +1,12 @@
 package com.example.util
 
+import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.net.Uri
+import java.io.File
+import java.io.FileOutputStream
 import kotlin.math.max
 import kotlin.math.min
 
@@ -95,5 +100,29 @@ object ImageEnhancer {
         }
 
         return output
+    }
+
+    /**
+     * Reads a chosen image URI, enhances its sharpness and contrast with AI filter,
+     * and saves it into local app storage, returning the absolute path.
+     */
+    fun processAndSaveEnhancedUri(context: Context, sourceUri: Uri): String? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(sourceUri) ?: return null
+            val originalBitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream.close()
+            if (originalBitmap == null) return null
+
+            val enhanced = enhanceCrestOrPhoto(originalBitmap)
+            val dir = File(context.filesDir, "enhanced_crests").apply { if (!exists()) mkdirs() }
+            val destFile = File(dir, "enhanced_${System.currentTimeMillis()}.png")
+            FileOutputStream(destFile).use { out ->
+                enhanced.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            destFile.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 }

@@ -359,13 +359,10 @@ fun MatchLiveSheetScreen(
                         ) {
                             TeamCrestView(team = homeTeam, size = 52.dp)
                             Spacer(modifier = Modifier.height(4.dp))
-                            homeTeam?.let {
+                            homeTeam?.let { tm ->
                                 TeamJerseyView(
-                                    primaryColorHex = it.primaryColorHex,
-                                    secondaryColorHex = it.secondaryColorHex,
-                                    pattern = it.jerseyPattern,
-                                    width = 38.dp,
-                                    height = 30.dp
+                                    team = tm,
+                                    size = 36.dp
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
@@ -413,13 +410,10 @@ fun MatchLiveSheetScreen(
                         ) {
                             TeamCrestView(team = awayTeam, size = 52.dp)
                             Spacer(modifier = Modifier.height(4.dp))
-                            awayTeam?.let {
+                            awayTeam?.let { tm ->
                                 TeamJerseyView(
-                                    primaryColorHex = it.primaryColorHex,
-                                    secondaryColorHex = it.secondaryColorHex,
-                                    pattern = it.jerseyPattern,
-                                    width = 38.dp,
-                                    height = 30.dp
+                                    team = tm,
+                                    size = 36.dp
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
