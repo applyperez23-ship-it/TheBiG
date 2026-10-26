@@ -1,8 +1,17 @@
 package com.example.domain.rules
 
 import com.example.data.local.entity.MatchEvent
+import com.example.data.local.entity.Player
 import com.example.data.local.entity.Tournament
 import com.example.data.local.entity.TournamentTeamCrossRef
+
+data class TeamQuotaInfo(
+    val teamId: Long,
+    val rosterCount: Int,
+    val feePerPlayer: Double,
+    val totalTeamFee: Double,
+    val feePaid: Boolean
+)
 
 data class TournamentFinancialSummary(
     val entryFee: Double,
@@ -10,6 +19,9 @@ data class TournamentFinancialSummary(
     val enrolledTeamsCount: Int,
     val paidTeamsCount: Int,
     val pendingTeamsCount: Int,
+    val totalRosterPlayers: Int,
+    val averageFeePerPlayer: Double,
+    val teamQuotas: Map<Long, TeamQuotaInfo>,
     val estimatedRevenue: Double,
     val actualRevenue: Double,
     val pendingRevenue: Double,
@@ -37,7 +49,8 @@ object PrizeCalculator {
     fun calculate(
         tournament: Tournament,
         crossRefs: List<TournamentTeamCrossRef>,
-        events: List<MatchEvent> = emptyList()
+        events: List<MatchEvent> = emptyList(),
+        players: List<Player> = emptyList()
     ): TournamentFinancialSummary {
         val enrolledCount = crossRefs.size
         val paidCount = crossRefs.count { it.feePaid }
@@ -47,6 +60,36 @@ object PrizeCalculator {
         val estimatedRev = enrolledCount * fee
         val actualRev = paidCount * fee
         val pendingRev = pendingCount * fee
+
+        // Group players by team to automate roster-based calculations
+        val playersByTeam = players.groupBy { it.teamId }
+        val teamQuotasMap = crossRefs.associate { cr ->
+            val teamPlayers = playersByTeam[cr.teamId] ?: emptyList()
+            val rCount = teamPlayers.size
+            val effectivePerPlayer = if (rCount > 0) {
+                fee / rCount
+            } else if (tournament.playersPerTeam > 0) {
+                fee / tournament.playersPerTeam
+            } else {
+                0.0
+            }
+            cr.teamId to TeamQuotaInfo(
+                teamId = cr.teamId,
+                rosterCount = rCount,
+                feePerPlayer = effectivePerPlayer,
+                totalTeamFee = fee,
+                feePaid = cr.feePaid
+            )
+        }
+
+        val totalRoster = players.count { p -> crossRefs.any { it.teamId == p.teamId } }
+        val avgFeePerPlayer = if (totalRoster > 0) {
+            estimatedRev / totalRoster
+        } else if (tournament.playersPerTeam > 0) {
+            fee / tournament.playersPerTeam
+        } else {
+            0.0
+        }
 
         // Sanctions Pool calculation
         val yellowCount = events.count { it.eventType == "YELLOW_CARD" }
@@ -110,10 +153,13 @@ object PrizeCalculator {
 
         return TournamentFinancialSummary(
             entryFee = fee,
-            feePerPlayer = tournament.feePerPlayer,
+            feePerPlayer = avgFeePerPlayer,
             enrolledTeamsCount = enrolledCount,
             paidTeamsCount = paidCount,
             pendingTeamsCount = pendingCount,
+            totalRosterPlayers = totalRoster,
+            averageFeePerPlayer = avgFeePerPlayer,
+            teamQuotas = teamQuotasMap,
             estimatedRevenue = estimatedRev,
             actualRevenue = actualRev,
             pendingRevenue = pendingRev,

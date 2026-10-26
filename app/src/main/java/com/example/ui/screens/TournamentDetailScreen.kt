@@ -147,8 +147,8 @@ fun TournamentDetailScreen(
         StatsCalculator.getGoalkeeperRankings(matches, players, enrolledTeams, tournament.minMatchesForBestGk)
     }
 
-    val financialSummary = remember(tournament, crossRefs, events) {
-        PrizeCalculator.calculate(tournament, crossRefs, events)
+    val financialSummary = remember(tournament, crossRefs, events, players) {
+        PrizeCalculator.calculate(tournament, crossRefs, events, players)
     }
 
     Scaffold(
@@ -627,8 +627,12 @@ private fun FinancialTabContent(
                     Text("$${summary.estimatedRevenue.toInt()}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Desglose por Jugador:", style = MaterialTheme.typography.bodyMedium)
-                    Text("$${summary.feePerPlayer.toInt()}/jugador", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.secondary)
+                    Text("Plantilla Oficial Inscrita:", style = MaterialTheme.typography.bodyMedium)
+                    Text("${summary.totalRosterPlayers} jugadores (${summary.enrolledTeamsCount} clubes)", fontWeight = FontWeight.SemiBold)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Cuota Promedio por Jugador:", style = MaterialTheme.typography.bodyMedium)
+                    Text("$${summary.averageFeePerPlayer.toInt()}/jugador", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.secondary)
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Recaudado Real:", style = MaterialTheme.typography.bodyMedium)
@@ -671,9 +675,10 @@ private fun FinancialTabContent(
         }
 
         Spacer(modifier = Modifier.height(10.dp))
-        Text("Control de Cuotas por Club", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+        Text("Control de Cuotas por Club (Cálculo Automático por Plantilla)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
         crossRefs.forEach { cr ->
             val tm = teamMap[cr.teamId] ?: return@forEach
+            val quotaInfo = summary.teamQuotas[cr.teamId]
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp),
@@ -682,13 +687,23 @@ private fun FinancialTabContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(10.dp),
+                        .padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(tm.name, fontWeight = FontWeight.SemiBold)
+                    Column {
+                        Text(tm.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        val rCount = quotaInfo?.rosterCount ?: 0
+                        val perPl = quotaInfo?.feePerPlayer?.toInt() ?: 0
+                        Text(
+                            text = if (rCount > 0) "$rCount jugadores en plantilla • $$perPl/jugador" else "Sin jugadores en plantilla",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(if (cr.feePaid) "Pagado" else "Pendiente", fontSize = 12.sp, color = if (cr.feePaid) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.width(6.dp))
                         Checkbox(checked = cr.feePaid, onCheckedChange = { onToggleFee(tm.id, cr.feePaid) })
                     }
                 }

@@ -4,6 +4,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,15 +19,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -295,12 +301,19 @@ private fun CreateTeamDialog(
     var shieldMode by remember { mutableStateOf("PRESET") }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
+        contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            val enhancedUri = ImageEnhancer.processAndSaveEnhancedUri(context, uri) ?: TeamCrestHelper.copyShieldUriToInternal(context, uri)
-            customShieldUri = enhancedUri
-            shieldMode = "GALLERY"
+            try {
+                val enhancedUri = ImageEnhancer.processAndSaveEnhancedUri(context, uri)
+                    ?: TeamCrestHelper.copyShieldUriToInternal(context, uri)
+                if (enhancedUri != null) {
+                    customShieldUri = enhancedUri
+                    shieldMode = "GALLERY"
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -422,11 +435,7 @@ private fun CreateTeamDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
-                        onClick = {
-                            photoPickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
+                        onClick = { photoPickerLauncher.launch("image/*") },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -457,6 +466,100 @@ private fun CreateTeamDialog(
                                 onClick = { selectedShieldIdx = index },
                                 text = { Text(title, fontSize = 11.sp) }
                             )
+                        }
+                    }
+                }
+
+                // Primary Color Selector
+                Text(
+                    text = "Color Principal (Jugadores de Campo):",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(presetColors) { hex ->
+                        val parsed = TeamCrestHelper.parseColor(hex, Color.Yellow)
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(parsed, CircleShape)
+                                .border(
+                                    width = if (primaryColor == hex) 3.dp else 1.dp,
+                                    color = if (primaryColor == hex) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                                    shape = CircleShape
+                                )
+                                .clickable { primaryColor = hex },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (primaryColor == hex) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+
+                // Secondary Color Selector
+                Text(
+                    text = "Color Secundario / Acentos:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(presetColors) { hex ->
+                        val parsed = TeamCrestHelper.parseColor(hex, Color.Black)
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(parsed, CircleShape)
+                                .border(
+                                    width = if (secondaryColor == hex) 3.dp else 1.dp,
+                                    color = if (secondaryColor == hex) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                                    shape = CircleShape
+                                )
+                                .clickable { secondaryColor = hex },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (secondaryColor == hex) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+
+                // Goalkeeper Color Selector
+                Text(
+                    text = "Color Exclusivo del Portero:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(gkPresetColors) { hex ->
+                        val parsed = TeamCrestHelper.parseColor(hex, Color.Green)
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(parsed, CircleShape)
+                                .border(
+                                    width = if (goalkeeperColor == hex) 3.dp else 1.dp,
+                                    color = if (goalkeeperColor == hex) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                                    shape = CircleShape
+                                )
+                                .clickable { goalkeeperColor = hex },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (goalkeeperColor == hex) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
                         }
                     }
                 }

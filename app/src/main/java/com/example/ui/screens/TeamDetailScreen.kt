@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,14 +19,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
@@ -37,6 +41,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,7 +49,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -535,14 +542,30 @@ private fun EditTeamDialog(
     var shieldMode by remember { mutableStateOf(if (team.customShieldUri != null) "GALLERY" else "PRESET") }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
+        contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            val enhancedUri = ImageEnhancer.processAndSaveEnhancedUri(context, uri) ?: TeamCrestHelper.copyShieldUriToInternal(context, uri)
-            customShieldUri = enhancedUri
-            shieldMode = "GALLERY"
+            try {
+                val enhancedUri = ImageEnhancer.processAndSaveEnhancedUri(context, uri)
+                    ?: TeamCrestHelper.copyShieldUriToInternal(context, uri)
+                if (enhancedUri != null) {
+                    customShieldUri = enhancedUri
+                    shieldMode = "GALLERY"
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
+
+    val presetColors = listOf(
+        "#F59E0B", "#10B981", "#3B82F6", "#EF4444", "#8B5CF6",
+        "#EC4899", "#0F172A", "#FFFFFF", "#F97316", "#14B8A6"
+    )
+
+    val gkPresetColors = listOf(
+        "#10B981", "#F97316", "#06B6D4", "#EC4899", "#EAB308", "#1E293B", "#8B5CF6"
+    )
 
     var primaryColor by remember { mutableStateOf(team.primaryColorHex) }
     var secondaryColor by remember { mutableStateOf(team.secondaryColorHex) }
@@ -560,6 +583,62 @@ private fun EditTeamDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Live Visual Preview
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            TeamCrestView(
+                                shieldIndex = selectedShieldIdx,
+                                primaryColorHex = primaryColor,
+                                secondaryColorHex = secondaryColor,
+                                borderColorHex = borderColor,
+                                shortName = if (shortName.isNotBlank()) shortName else "BIG",
+                                customShieldUri = if (shieldMode == "GALLERY") customShieldUri else null,
+                                size = 52.dp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Escudo", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        }
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            TeamJerseyView(
+                                primaryColorHex = primaryColor,
+                                secondaryColorHex = secondaryColor,
+                                jerseyPattern = jerseyPattern,
+                                isGoalkeeper = false,
+                                dorsal = 10,
+                                size = 52.dp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Campo", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        }
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            TeamJerseyView(
+                                primaryColorHex = primaryColor,
+                                secondaryColorHex = secondaryColor,
+                                goalkeeperColorHex = goalkeeperColor,
+                                jerseyPattern = jerseyPattern,
+                                isGoalkeeper = true,
+                                dorsal = 1,
+                                size = 52.dp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Portero", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.secondary)
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -575,17 +654,129 @@ private fun EditTeamDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedButton(
-                    onClick = {
-                        photoPickerLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
+                // Shield Options
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (customShieldUri != null) "Cambiar Escudo Galería" else "Subir Escudo Galería")
+                    OutlinedButton(
+                        onClick = { photoPickerLauncher.launch("image/*") },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (customShieldUri != null && shieldMode == "GALLERY") "Cambiar Foto" else "Desde Galería", fontSize = 11.sp)
+                    }
+
+                    if (customShieldUri != null) {
+                        Button(
+                            onClick = { shieldMode = "PRESET" },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Usar Vectorial", fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                if (shieldMode == "PRESET") {
+                    ScrollableTabRow(
+                        selectedTabIndex = selectedShieldIdx % 10,
+                        edgePadding = 0.dp
+                    ) {
+                        TeamCrestHelper.PRESET_NAMES.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedShieldIdx == index,
+                                onClick = { selectedShieldIdx = index },
+                                text = { Text(title, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                }
+
+                // Primary Color
+                Text("Color Principal (Campo):", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(presetColors) { hex ->
+                        val parsed = TeamCrestHelper.parseColor(hex, Color.Yellow)
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(parsed, CircleShape)
+                                .border(
+                                    width = if (primaryColor == hex) 3.dp else 1.dp,
+                                    color = if (primaryColor == hex) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                                    shape = CircleShape
+                                )
+                                .clickable { primaryColor = hex },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (primaryColor == hex) Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                // Secondary Color
+                Text("Color Secundario / Acentos:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(presetColors) { hex ->
+                        val parsed = TeamCrestHelper.parseColor(hex, Color.Black)
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(parsed, CircleShape)
+                                .border(
+                                    width = if (secondaryColor == hex) 3.dp else 1.dp,
+                                    color = if (secondaryColor == hex) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                                    shape = CircleShape
+                                )
+                                .clickable { secondaryColor = hex },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (secondaryColor == hex) Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                // Goalkeeper Color
+                Text("Color Exclusivo del Portero:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(gkPresetColors) { hex ->
+                        val parsed = TeamCrestHelper.parseColor(hex, Color.Green)
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(parsed, CircleShape)
+                                .border(
+                                    width = if (goalkeeperColor == hex) 3.dp else 1.dp,
+                                    color = if (goalkeeperColor == hex) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.5f),
+                                    shape = CircleShape
+                                )
+                                .clickable { goalkeeperColor = hex },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (goalkeeperColor == hex) Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                // Jersey Pattern
+                Text("Patrón de Camiseta:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    val patterns = listOf(
+                        JerseyPatternType.SOLID to "Lisa",
+                        JerseyPatternType.STRIPES_VERTICAL to "Rayas V",
+                        JerseyPatternType.STRIPES_HORIZONTAL to "Franja H",
+                        JerseyPatternType.SASH to "Banda",
+                        JerseyPatternType.HALF to "Mitad"
+                    )
+                    patterns.forEach { (pKey, pLabel) ->
+                        FilterChip(
+                            selected = jerseyPattern == pKey,
+                            onClick = { jerseyPattern = pKey },
+                            label = { Text(pLabel, fontSize = 10.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         },
