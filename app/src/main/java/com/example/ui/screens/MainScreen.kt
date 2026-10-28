@@ -51,10 +51,16 @@ fun MainScreen(
     tournamentViewModel: TournamentViewModel,
     teamViewModel: TeamViewModel,
     matchViewModel: MatchViewModel,
-    settingsViewModel: SettingsViewModel
+    settingsViewModel: SettingsViewModel,
+    initialMatchId: Long? = null
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    var currentDestination by remember { mutableStateOf<AppDestination>(AppDestination.Main) }
+    var currentDestination by remember {
+        mutableStateOf<AppDestination>(
+            if (initialMatchId != null && initialMatchId > 0) AppDestination.MatchLive(initialMatchId)
+            else AppDestination.Main
+        )
+    }
 
     val onboardingShown by settingsViewModel.onboardingShown.collectAsStateWithLifecycle()
     val allTeams by teamViewModel.teams.collectAsStateWithLifecycle()

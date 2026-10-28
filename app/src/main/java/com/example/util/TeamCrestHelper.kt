@@ -70,6 +70,103 @@ object TeamCrestHelper {
             uri.toString()
         }
     }
+
+    /**
+     * Draws the team shield on an android.graphics.Canvas (used for image export).
+     */
+    fun drawTeamShieldOnAndroidCanvas(
+        canvas: android.graphics.Canvas,
+        cx: Float,
+        cy: Float,
+        radius: Float,
+        team: Team,
+        context: Context? = null
+    ) {
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+        // If custom URI exists, attempt to load bitmap
+        var loadedCustom: android.graphics.Bitmap? = null
+        if (!team.customShieldUri.isNullOrBlank() && context != null) {
+            try {
+                val uri = Uri.parse(team.customShieldUri)
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    loadedCustom = android.graphics.BitmapFactory.decodeStream(stream)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        if (loadedCustom != null) {
+            val bmp = loadedCustom!!
+            val saveCount = canvas.save()
+            val clipPath = android.graphics.Path().apply {
+                addCircle(cx, cy, radius, android.graphics.Path.Direction.CCW)
+            }
+            canvas.clipPath(clipPath)
+            val srcRect = android.graphics.Rect(0, 0, bmp.width, bmp.height)
+            val dstRect = android.graphics.RectF(cx - radius, cy - radius, cx + radius, cy + radius)
+            canvas.drawBitmap(bmp, srcRect, dstRect, p)
+            canvas.restoreToCount(saveCount)
+
+            // Border
+            p.style = android.graphics.Paint.Style.STROKE
+            p.strokeWidth = radius * 0.12f
+            p.color = try { android.graphics.Color.parseColor(team.borderColorHex) } catch (e: Exception) { android.graphics.Color.WHITE }
+            canvas.drawCircle(cx, cy, radius, p)
+            return
+        }
+
+        // Otherwise draw vector preset on canvas
+        val primary = try { android.graphics.Color.parseColor(team.primaryColorHex) } catch (e: Exception) { android.graphics.Color.parseColor("#F59E0B") }
+        val secondary = try { android.graphics.Color.parseColor(team.secondaryColorHex) } catch (e: Exception) { android.graphics.Color.parseColor("#0F172A") }
+        val border = try { android.graphics.Color.parseColor(team.borderColorHex) } catch (e: Exception) { android.graphics.Color.WHITE }
+
+        val path = android.graphics.Path()
+        val w = radius * 2
+        val h = radius * 2
+        val left = cx - radius
+        val top = cy - radius
+        val right = cx + radius
+        val bottom = cy + radius
+
+        path.moveTo(cx, top)
+        path.lineTo(right, top + h * 0.2f)
+        path.lineTo(right, top + h * 0.55f)
+        path.quadTo(right, bottom, cx, bottom + h * 0.1f)
+        path.quadTo(left, bottom, left, top + h * 0.55f)
+        path.lineTo(left, top + h * 0.2f)
+        path.close()
+
+        p.style = android.graphics.Paint.Style.FILL
+        p.color = primary
+        canvas.drawPath(path, p)
+
+        // Split
+        val halfPath = android.graphics.Path().apply {
+            moveTo(cx, top)
+            lineTo(right, top + h * 0.2f)
+            lineTo(right, top + h * 0.55f)
+            quadTo(right, bottom, cx, bottom + h * 0.1f)
+            close()
+        }
+        p.color = secondary
+        canvas.drawPath(halfPath, p)
+
+        // Stroke border
+        p.style = android.graphics.Paint.Style.STROKE
+        p.strokeWidth = radius * 0.14f
+        p.color = border
+        canvas.drawPath(path, p)
+
+        // Initials
+        p.style = android.graphics.Paint.Style.FILL
+        p.color = border
+        p.textSize = radius * 0.7f
+        p.typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+        p.textAlign = android.graphics.Paint.Align.CENTER
+        canvas.drawText(team.shortName.take(3).uppercase(), cx, cy + (radius * 0.25f), p)
+    }
 }
 
 @Composable

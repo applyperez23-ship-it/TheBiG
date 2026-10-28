@@ -342,13 +342,13 @@ object GraphicCardGenerator {
             }
         }
 
-        // Mandatory Official Signature Badge: "Desarrollado por Daniel (el Grande)"
+        // Mandatory Official Brand Badge
         val badgeY = 990f
         paint.textAlign = Paint.Align.CENTER
         paint.color = Color.parseColor("#F59E0B")
         paint.textSize = 24f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("TheBiG • Desarrollado por Daniel (el Grande)", 540f, badgeY, paint)
+        canvas.drawText("TheBiG • Torneo Oficial", 540f, badgeY, paint)
 
         return bitmap
     }
@@ -398,46 +398,11 @@ object GraphicCardGenerator {
         paint.textSize = 20f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.textAlign = Paint.Align.CENTER
-        canvas.drawText("TheBiG • Desarrollado por Daniel (el Grande)", 540f, 1010f, paint)
+        canvas.drawText("TheBiG • Plataforma Oficial", 540f, 1010f, paint)
     }
 
     private fun drawVectorShield(canvas: Canvas, cx: Float, cy: Float, radius: Float, team: Team) {
-        val p = Paint(Paint.ANTI_ALIAS_FLAG)
-        val path = Path()
-
-        val top = cy - radius
-        val bottom = cy + radius * 1.25f
-        val left = cx - radius
-        val right = cx + radius
-
-        path.moveTo(cx, top)
-        path.lineTo(right, top + radius * 0.25f)
-        path.lineTo(right, cy + radius * 0.3f)
-        path.quadTo(right, bottom - radius * 0.2f, cx, bottom)
-        path.quadTo(left, bottom - radius * 0.2f, left, cy + radius * 0.3f)
-        path.lineTo(left, top + radius * 0.25f)
-        path.close()
-
-        // Primary Color Fill
-        val primary = try { Color.parseColor(team.primaryColorHex) } catch (e: Exception) { Color.parseColor("#0284C7") }
-        p.color = primary
-        p.style = Paint.Style.FILL
-        canvas.drawPath(path, p)
-
-        // Border
-        val border = try { Color.parseColor(team.borderColorHex) } catch (e: Exception) { Color.parseColor("#F59E0B") }
-        p.color = border
-        p.style = Paint.Style.STROKE
-        p.strokeWidth = 10f
-        canvas.drawPath(path, p)
-
-        // Center Initial
-        p.style = Paint.Style.FILL
-        p.color = Color.WHITE
-        p.textSize = radius * 0.85f
-        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        p.textAlign = Paint.Align.CENTER
-        canvas.drawText(team.shortName.take(3), cx, cy + (radius * 0.28f), p)
+        TeamCrestHelper.drawTeamShieldOnAndroidCanvas(canvas, cx, cy, radius, team)
     }
 
     /**
@@ -462,10 +427,10 @@ object GraphicCardGenerator {
                 type = "image/png"
                 putExtra(Intent.EXTRA_STREAM, contentUri)
                 putExtra(Intent.EXTRA_SUBJECT, title)
-                putExtra(Intent.EXTRA_TEXT, "$title\nDesarrollado por Daniel (el Grande)")
+                putExtra(Intent.EXTRA_TEXT, "$title\nTorneo oficial gestionado con TheBiG")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.startActivity(Intent.createChooser(shareIntent, "Compartir Tarjeta 1:1"))
+            context.startActivity(Intent.createChooser(shareIntent, "Compartir Imagen"))
         } catch (e: Exception) {
             e.printStackTrace()
         }

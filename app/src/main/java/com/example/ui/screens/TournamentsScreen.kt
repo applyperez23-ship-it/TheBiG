@@ -153,10 +153,13 @@ fun TournamentsScreen(
         }
     }
 
+    val allTeams by viewModel.allTeams.collectAsStateWithLifecycle()
+
     if (showCreateDialog) {
-        CreateTournamentDialog(
+        com.example.ui.components.CreateTournamentWizardDialog(
+            availableTeams = allTeams,
             onDismiss = { showCreateDialog = false },
-            onConfirm = { name, edition, fee, playersCount, durationMin, mode, timing, ch, ru, sc, asst, gk, mvp, yellowF, redF, minGk ->
+            onConfirm = { name, edition, type, durationMin, fee, playersCount, selectedTeamIds, ch, ru, sc, gk ->
                 scope.launch {
                     val id = viewModel.createTournament(
                         name = name,
@@ -164,18 +167,26 @@ fun TournamentsScreen(
                         entryFee = fee,
                         playersPerTeam = playersCount,
                         matchDurationMinutes = durationMin,
-                        tournamentType = mode,
-                        awardTiming = timing,
+                        tournamentType = type,
+                        awardTiming = AwardTimingModes.END_OF_LEAGUE,
                         prizeChampion = ch,
                         prizeRunnerUp = ru,
                         prizeScorer = sc,
-                        prizeAssister = asst,
+                        prizeAssister = 0.0,
                         prizeBestGk = gk,
-                        prizeMvp = mvp,
-                        yellowCardFine = yellowF,
-                        redCardFine = redF,
-                        minMatchesGk = minGk
+                        prizeMvp = 0.0,
+                        yellowCardFine = 5.0,
+                        redCardFine = 10.0,
+                        minMatchesGk = 2
                     )
+                    // Enroll all selected teams
+                    for (tId in selectedTeamIds) {
+                        viewModel.enrollTeam(id, tId, feePaid = false)
+                    }
+                    // Generate schedule
+                    if (selectedTeamIds.size >= 2) {
+                        viewModel.generateFixture(id)
+                    }
                     showCreateDialog = false
                     onTournamentClick(id)
                 }

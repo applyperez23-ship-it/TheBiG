@@ -57,11 +57,14 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -199,7 +202,7 @@ fun MatchLiveSheetScreen(
                                     val pName = (homePlayers + awayPlayers).firstOrNull { it.id == ev.playerId }?.name ?: ""
                                     appendLine("- ${ev.minute}' ${ev.eventType}: $pName ($tName)")
                                 }
-                                appendLine("Desarrollado por Daniel (el Grande)")
+                                appendLine("TheBiG • Acta Oficial")
                             }
                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
@@ -813,6 +816,8 @@ fun MatchLiveSheetScreen(
     // Dialog 5: Shootout Score Dialog
     if (showShootoutDialog) {
         ShootoutScoreDialog(
+            homeTeam = homeTeam,
+            awayTeam = awayTeam,
             initialHome = currentMatch.homePenalties ?: 0,
             initialAway = currentMatch.awayPenalties ?: 0,
             onDismiss = { showShootoutDialog = false },
@@ -1732,52 +1737,237 @@ fun SubstitutionDialog(
     )
 }
 
-// Dialog: Shootout Score
+// Dialog: Shootout Score (Dedicated Penalty Shootout Mode)
 @Composable
 fun ShootoutScoreDialog(
+    homeTeam: Team?,
+    awayTeam: Team?,
     initialHome: Int,
     initialAway: Int,
     onDismiss: () -> Unit,
     onConfirm: (homePen: Int, awayPen: Int) -> Unit
 ) {
-    var homePenText by remember { mutableStateOf(initialHome.toString()) }
-    var awayPenText by remember { mutableStateOf(initialAway.toString()) }
+    // History of shots: Pair(isHome: Boolean, isGoal: Boolean)
+    val kicks = remember { mutableStateListOf<Pair<Boolean, Boolean>>() }
+    var currentIsHome by remember { mutableStateOf(true) }
+
+    val homeGoals = kicks.count { it.first && it.second }
+    val awayGoals = kicks.count { !it.first && it.second }
+
+    val homeKicks = kicks.filter { it.first }
+    val awayKicks = kicks.filter { !it.first }
+
+    val roundsCount = maxOf(5, maxOf(homeKicks.size, awayKicks.size) + 1)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Tanda de Penaltis") },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Tanda de Penaltis Oficial", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Registra la cantidad de penales acertados por cada equipo:")
-                OutlinedTextField(
-                    value = homePenText,
-                    onValueChange = { homePenText = it },
-                    label = { Text("Penaltis Local") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = awayPenText,
-                    onValueChange = { awayPenText = it },
-                    label = { Text("Penaltis Visitante") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Scoreboard Banner
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                            TeamCrestView(team = homeTeam, size = 38.dp)
+                            Text(homeTeam?.shortName ?: "LOC", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+
+                        Text(
+                            text = "$homeGoals - $awayGoals",
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                            TeamCrestView(team = awayTeam, size = 38.dp)
+                            Text(awayTeam?.shortName ?: "VIS", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+                }
+
+                // Visual Indicator Circles for Home Team
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "${homeTeam?.name ?: "Local"} (${homeKicks.size} tiros):",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (i in 0 until roundsCount) {
+                            val kick = homeKicks.getOrNull(i)
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(
+                                        color = when {
+                                            kick == null -> Color.Gray.copy(alpha = 0.25f)
+                                            kick.second -> Color(0xFF10B981) // Gol
+                                            else -> Color(0xFFEF4444) // Fallado
+                                        },
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (kick != null) {
+                                    Icon(
+                                        imageVector = if (kick.second) Icons.Default.Check else Icons.Default.Close,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Visual Indicator Circles for Away Team
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "${awayTeam?.name ?: "Visitante"} (${awayKicks.size} tiros):",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (i in 0 until roundsCount) {
+                            val kick = awayKicks.getOrNull(i)
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(
+                                        color = when {
+                                            kick == null -> Color.Gray.copy(alpha = 0.25f)
+                                            kick.second -> Color(0xFF10B981) // Gol
+                                            else -> Color(0xFFEF4444) // Fallado
+                                        },
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (kick != null) {
+                                    Icon(
+                                        imageVector = if (kick.second) Icons.Default.Check else Icons.Default.Close,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Turn Indicator
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                    )
+                ) {
+                    Text(
+                        text = "Turno de tiro: ${if (currentIsHome) homeTeam?.name ?: "Local" else awayTeam?.name ?: "Visitante"}",
+                        modifier = Modifier.padding(10.dp),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // Action Buttons: Gol & Fallado
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            kicks.add(Pair(currentIsHome, true))
+                            currentIsHome = !currentIsHome
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("GOL", fontWeight = FontWeight.Black, fontSize = 14.sp)
+                    }
+
+                    Button(
+                        onClick = {
+                            kicks.add(Pair(currentIsHome, false))
+                            currentIsHome = !currentIsHome
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("FALLADO", fontWeight = FontWeight.Black, fontSize = 14.sp)
+                    }
+                }
+
+                if (kicks.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = {
+                            val last = kicks.removeLastOrNull()
+                            if (last != null) {
+                                currentIsHome = last.first
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Deshacer último tiro (${kicks.size} registrados)")
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val h = homePenText.toIntOrNull() ?: 0
-                    val a = awayPenText.toIntOrNull() ?: 0
-                    onConfirm(h, a)
-                }
+                    onConfirm(homeGoals, awayGoals)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                shape = RoundedCornerShape(10.dp)
             ) {
-                Text("Guardar Penaltis")
+                Text("Confirmar Tanda ($homeGoals - $awayGoals)")
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
+            OutlinedButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Cerrar")
+            }
         }
     )
 }

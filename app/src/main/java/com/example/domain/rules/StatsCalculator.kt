@@ -88,10 +88,17 @@ object StatsCalculator {
         matches: List<Match>,
         players: List<Player>,
         teams: List<Team>,
-        minMatchesRequired: Int = 2
+        minMatchesRequired: Int = 2,
+        requireSemifinals: Boolean = false
     ): List<GoalkeeperStat> {
         val teamMap = teams.associateBy { it.id }
         val goalkeepers = players.filter { it.isGoalkeeper }
+
+        // Find teams that reached Semifinals or Finals if any knockout matches exist
+        val semiOrFinalTeamIds = matches.filter { m ->
+            m.roundName.contains("Semi", ignoreCase = true) ||
+            m.roundName.contains("Final", ignoreCase = true)
+        }.flatMap { listOf(it.homeTeamId, it.awayTeamId) }.toSet()
 
         val stats = mutableListOf<GoalkeeperStat>()
         for (gk in goalkeepers) {
@@ -99,6 +106,13 @@ object StatsCalculator {
             val teamMatches = matches.filter { it.status == "FINISHED" && (it.homeTeamId == team.id || it.awayTeamId == team.id) }
             val pj = teamMatches.size
             if (pj < minMatchesRequired) continue
+
+            // If tournament has reached knockout stages (semifinals/finals) or requireSemifinals is true
+            if ((requireSemifinals || semiOrFinalTeamIds.isNotEmpty()) && semiOrFinalTeamIds.isNotEmpty()) {
+                if (!semiOrFinalTeamIds.contains(team.id)) {
+                    continue
+                }
+            }
 
             var goalsConceded = 0
             for (m in teamMatches) {
@@ -109,7 +123,11 @@ object StatsCalculator {
             stats.add(GoalkeeperStat(player = gk, team = team, matchesPlayed = pj, goalsConceded = goalsConceded, coefficient = coef))
         }
 
-        return stats.sortedBy { it.coefficient }
+        return stats.sortedWith(
+            compareBy<GoalkeeperStat> { it.coefficient }
+                .thenBy { it.goalsConceded }
+                .thenByDescending { it.matchesPlayed }
+        )
     }
 
     fun getTopCards(

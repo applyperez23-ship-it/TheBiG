@@ -158,10 +158,72 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
     }
 
     // --- Backup & Restore via JSON ---
+    suspend fun exportTournamentToJson(tournamentId: Long): String = withContext(Dispatchers.IO) {
+        val root = JSONObject()
+        root.put("app", "TheBiG")
+        root.put("version", 4)
+        root.put("timestamp", System.currentTimeMillis())
+
+        val t = db.tournamentDao().getTournamentByIdOnce(tournamentId)
+        if (t != null) {
+            val tObj = JSONObject().apply {
+                put("id", t.id)
+                put("name", t.name)
+                put("edition", t.edition)
+                put("entryFee", t.entryFee)
+                put("playersPerTeam", t.playersPerTeam)
+                put("matchDurationMinutes", t.matchDurationMinutes)
+                put("status", t.status)
+                put("tournamentType", t.tournamentType)
+                put("awardTiming", t.awardTiming)
+                put("prizeChampionAmount", t.prizeChampionAmount)
+                put("prizeRunnerUpAmount", t.prizeRunnerUpAmount)
+                put("prizeTopScorerAmount", t.prizeTopScorerAmount)
+                put("prizeBestGkAmount", t.prizeBestGkAmount)
+            }
+            root.put("tournament", tObj)
+        }
+
+        val teams = db.teamDao().getTeamsForTournamentOnce(tournamentId)
+        val teamArr = JSONArray()
+        for (team in teams) {
+            val obj = JSONObject().apply {
+                put("id", team.id)
+                put("name", team.name)
+                put("shortName", team.shortName)
+                put("shieldVectorIndex", team.shieldVectorIndex)
+                put("primaryColorHex", team.primaryColorHex)
+                put("secondaryColorHex", team.secondaryColorHex)
+                put("borderColorHex", team.borderColorHex)
+                put("jerseyPattern", team.jerseyPattern)
+                put("goalkeeperColorHex", team.goalkeeperColorHex)
+            }
+            teamArr.put(obj)
+        }
+        root.put("teams", teamArr)
+
+        val matches = db.matchDao().getMatchesForTournamentOnce(tournamentId)
+        val matchesArr = JSONArray()
+        for (m in matches) {
+            val obj = JSONObject().apply {
+                put("id", m.id)
+                put("homeTeamId", m.homeTeamId)
+                put("awayTeamId", m.awayTeamId)
+                put("homeScore", m.homeScore)
+                put("awayScore", m.awayScore)
+                put("roundName", m.roundName)
+                put("status", m.status)
+            }
+            matchesArr.put(obj)
+        }
+        root.put("matches", matchesArr)
+
+        root.toString(2)
+    }
+
     suspend fun exportDatabaseToJson(): String = withContext(Dispatchers.IO) {
         val root = JSONObject()
         root.put("app", "TheBiG")
-        root.put("author", "Daniel (el Grande)")
         root.put("version", 4)
         root.put("timestamp", System.currentTimeMillis())
 

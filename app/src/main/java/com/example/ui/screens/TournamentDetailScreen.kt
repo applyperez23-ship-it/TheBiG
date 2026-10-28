@@ -324,7 +324,7 @@ private fun StandingsTabContent(
             ) {
                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Exportar 1:1 Instagram Feed", fontSize = 12.sp)
+                Text("Compartir Tabla", fontSize = 12.sp)
             }
 
             OutlinedButton(
@@ -450,7 +450,7 @@ private fun FixtureTabContent(
             ) {
                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Exportar Fixture 1:1", fontSize = 12.sp)
+                Text("Compartir Fixture", fontSize = 12.sp)
             }
 
             if (matches.isEmpty() && enrolledTeams.size >= 2) {
@@ -544,7 +544,7 @@ private fun StatisticsTabContent(
             ) {
                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Exportar Goleadores 1:1", fontSize = 11.sp)
+                Text("Compartir Goleadores", fontSize = 11.sp)
             }
         }
 

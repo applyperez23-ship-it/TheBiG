@@ -74,11 +74,17 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    val matchIdFromIntent = intent?.getLongExtra(
+                        com.example.service.MatchNotificationScheduler.EXTRA_MATCH_ID,
+                        -1L
+                    )?.takeIf { it > 0 }
+
                     MainScreen(
                         tournamentViewModel = tournamentViewModel,
                         teamViewModel = teamViewModel,
                         matchViewModel = matchViewModel,
-                        settingsViewModel = settingsViewModel
+                        settingsViewModel = settingsViewModel,
+                        initialMatchId = matchIdFromIntent
                     )
                 }
             }

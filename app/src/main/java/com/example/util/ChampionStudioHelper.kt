@@ -81,7 +81,7 @@ object ChampionStudioHelper {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             isAntiAlias = true
         }
-        canvas.drawText("Daniel (el Grande)", targetWidth - 230f, 100f, creatorPaint)
+        canvas.drawText("Oficial", targetWidth - 200f, 100f, creatorPaint)
 
         // 2. Team Name Header with adjustable position
         val headerX = (targetWidth * titleOffsetXPercent).coerceIn(100f, targetWidth - 600f)

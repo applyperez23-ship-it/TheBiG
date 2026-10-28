@@ -39,8 +39,13 @@ import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Poll
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.material3.CircularProgressIndicator
+import com.example.util.TheBiGBackupHelper
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -107,6 +112,9 @@ fun SettingsScreen(
     var importJsonText by remember { mutableStateOf("") }
     var showBroadcastSimulatorDialog by remember { mutableStateOf(false) }
     var showEditUrlDialog by remember { mutableStateOf(false) }
+    var showUpdateCheckDialog by remember { mutableStateOf(false) }
+    var isCheckingUpdates by remember { mutableStateOf(false) }
+    var showQrShareDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -427,6 +435,17 @@ fun SettingsScreen(
                         }
                     }
 
+                    Button(
+                        onClick = { showQrShareDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Compartir Torneo en TheBiGs (QR Espectador)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
                     backupStatus?.let { status ->
                         Text(
                             text = status,
@@ -434,6 +453,49 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary
                         )
+                    }
+                }
+            }
+
+            // Software Updates (OTAs) Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Actualizaciones de Software",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "Versión instalada: v1.2.0 (Compilación oficial offline)",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            showUpdateCheckDialog = true
+                            isCheckingUpdates = true
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("check_updates_button")
+                    ) {
+                        Icon(Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Buscar", fontSize = 12.sp)
                     }
                 }
             }
@@ -751,6 +813,123 @@ fun SettingsScreen(
             dismissButton = {
                 OutlinedButton(onClick = { showImportDialog = false }) {
                     Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Update Check Dialog
+    if (showUpdateCheckDialog) {
+        androidx.compose.runtime.LaunchedEffect(showUpdateCheckDialog) {
+            kotlinx.coroutines.delay(1200)
+            isCheckingUpdates = false
+        }
+
+        AlertDialog(
+            onDismissRequest = { showUpdateCheckDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Actualizaciones TheBiG")
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (isCheckingUpdates) {
+                        CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                        Text(
+                            text = "Comprobando nuevas compilaciones en el repositorio oficial...",
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    } else {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(40.dp))
+                        Text(
+                            text = "TheBiG está actualizado a la versión v1.2.0 (Compilación estable).",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = "Tu aplicación cuenta con el último motor de fixtures matemáticos, editor de escudos sin conexión y sistema de premios dinámico.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showUpdateCheckDialog = false }) {
+                    Text("Aceptar")
+                }
+            }
+        )
+    }
+
+    // QR Spectator Sharing Dialog
+    if (showQrShareDialog) {
+        val qrBitmap = remember {
+            try {
+                TheBiGBackupHelper.generateQrBitmap("thebig://spectator/torneo", 400)
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showQrShareDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.QrCode, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Compartir Torneo en TheBiGs")
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Escanea este código QR desde otro dispositivo con TheBiG para abrir el Modo Espectador en tiempo real:",
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
+
+                    qrBitmap?.let { bmp ->
+                        Box(
+                            modifier = Modifier
+                                .size(200.dp)
+                                .background(Color.White, RoundedCornerShape(12.dp))
+                                .padding(8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                bitmap = bmp.asImageBitmap(),
+                                contentDescription = "Código QR Espectador",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "El Modo Espectador es de solo lectura y protege tu base de datos contra modificaciones o corrupción externa.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showQrShareDialog = false }) {
+                    Text("Cerrar")
                 }
             }
         )

@@ -42,13 +42,13 @@ fun OnboardingDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Plataforma nativa para la gestión integral de torneos de fútbol, creada por Daniel (el Grande).",
+                    text = "Plataforma nativa para la gestión integral de torneos de fútbol.",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "• Control financiero por jugador y pozo de sanciones\n• Registro de incidencias arbitrales en vivo\n• Cinta de Capitán (C) en actas y fotos\n• Exportación de tarjetas oficiales 1:1 para Instagram",
+                    text = "• Control financiero por jugador y pozo de sanciones\n• Registro de incidencias arbitrales en vivo\n• Cinta de Capitán (C) en actas y fotos\n• Compartir tablas e imágenes oficiales",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

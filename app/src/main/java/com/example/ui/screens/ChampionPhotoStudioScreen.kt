@@ -239,12 +239,12 @@ fun ChampionPhotoStudioScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Personalizacion y Mejora con IA",
+                        text = "Personalización y Filtro Gráfico",
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp
                     )
                     Text(
-                        text = "Puedes usar el escudo vectorial en alta definicion o subir una foto grupal del equipo campeon para procesarla con el filtro grafico de nitidez y contraste.",
+                        text = "Puedes usar el escudo vectorial en alta definición o subir una foto grupal del equipo campeón para procesarla con el filtro gráfico de nitidez y contraste.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -273,15 +273,15 @@ fun ChampionPhotoStudioScreen(
                         ) {
                             Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (isEnhancedWithAi) "Filtro IA Activo" else "Mejora con IA", fontSize = 12.sp)
+                            Text(if (isEnhancedWithAi) "Filtro HD Activo" else "Filtro Gráfico HD", fontSize = 12.sp)
                         }
                     }
                 }
             }
 
-            // 1080x1080 px Card Live Preview
+            // Official Card Live Preview
             Text(
-                text = "Vista Previa Formato 1:1 (Instagram Feed)",
+                text = "Vista Previa Oficial",
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp
             )
@@ -297,7 +297,7 @@ fun ChampionPhotoStudioScreen(
                 ) {
                     Image(
                         bitmap = bmp.asImageBitmap(),
-                        contentDescription = "Tarjeta de Campeon 1:1",
+                        contentDescription = "Tarjeta de Campeon Oficial",
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -323,7 +323,7 @@ fun ChampionPhotoStudioScreen(
             ) {
                 Icon(Icons.Default.Share, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Exportar Tarjeta 1:1 Instagram", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text("Compartir Imagen del Campeón", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
         }
     }
