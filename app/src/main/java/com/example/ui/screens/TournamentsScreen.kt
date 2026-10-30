@@ -159,7 +159,7 @@ fun TournamentsScreen(
         com.example.ui.components.CreateTournamentWizardDialog(
             availableTeams = allTeams,
             onDismiss = { showCreateDialog = false },
-            onConfirm = { name, edition, type, durationMin, fee, playersCount, selectedTeamIds, ch, ru, sc, gk ->
+            onConfirm = { name, edition, type, durationMin, fee, playersCount, selectedTeamIds, ch, ru, sc, gk, homeAndAway ->
                 scope.launch {
                     val id = viewModel.createTournament(
                         name = name,
@@ -183,9 +183,18 @@ fun TournamentsScreen(
                     for (tId in selectedTeamIds) {
                         viewModel.enrollTeam(id, tId, feePaid = false)
                     }
-                    // Generate schedule
+                    // Generate schedule using exact mathematical TournamentScheduler
                     if (selectedTeamIds.size >= 2) {
-                        viewModel.generateFixture(id)
+                        val enrolled = allTeams.filter { selectedTeamIds.contains(it.id) }
+                        val generatedMatches = com.example.domain.rules.TournamentScheduler.generateSchedule(
+                            tournamentId = id,
+                            tournamentType = type,
+                            teams = enrolled,
+                            homeAndAway = homeAndAway
+                        )
+                        for (m in generatedMatches) {
+                            com.example.TheBiGApp.instance.repository.saveMatch(m)
+                        }
                     }
                     showCreateDialog = false
                     onTournamentClick(id)

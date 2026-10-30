@@ -24,14 +24,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.FormatListNumbered
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.SportsSoccer
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -49,8 +43,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,7 +50,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -68,6 +59,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.local.entity.Team
 import com.example.data.local.entity.TournamentModes
+import com.example.domain.rules.PrizeCalculator
+import com.example.domain.rules.PrizeCategory
 import com.example.util.TeamCrestView
 
 @Composable
@@ -85,7 +78,8 @@ fun CreateTournamentWizardDialog(
         championPrize: Double,
         runnerUpPrize: Double,
         topScorerPrize: Double,
-        bestGkPrize: Double
+        bestGkPrize: Double,
+        homeAndAway: Boolean
     ) -> Unit
 ) {
     var step by remember { mutableIntStateOf(1) } // 1: General, 2: Equipos, 3: Premios %, 4: Resumen
@@ -94,6 +88,7 @@ fun CreateTournamentWizardDialog(
     var name by remember { mutableStateOf("") }
     var edition by remember { mutableStateOf("1") }
     var tournamentType by remember { mutableStateOf(TournamentModes.LEAGUE) }
+    var homeAndAway by remember { mutableStateOf(false) }
     var durationMinutes by remember { mutableIntStateOf(20) }
     var financesEnabled by remember { mutableStateOf(true) }
     var entryFeeText by remember { mutableStateOf("100.0") }
@@ -102,18 +97,24 @@ fun CreateTournamentWizardDialog(
     // Step 2 states
     val selectedTeamIds = remember { mutableStateListOf<Long>() }
 
-    // Step 3 states - Prize percentages
-    var champPct by remember { mutableFloatStateOf(50f) }
-    var runnerUpPct by remember { mutableFloatStateOf(25f) }
-    var topScorerPct by remember { mutableFloatStateOf(15f) }
-    var bestGkPct by remember { mutableFloatStateOf(10f) }
+    // Step 3 states - Auto-balancing 100% prize percentages
+    var percentages by remember {
+        mutableStateOf<Map<PrizeCategory, Float>>(
+            mapOf(
+                PrizeCategory.CHAMPION to 50f,
+                PrizeCategory.RUNNER_UP to 25f,
+                PrizeCategory.TOP_SCORER to 15f,
+                PrizeCategory.BEST_GK to 10f
+            )
+        )
+    }
 
     val entryFee = entryFeeText.toDoubleOrNull() ?: 0.0
     val totalPool = entryFee * selectedTeamIds.size
-    val championPrize = if (financesEnabled) totalPool * (champPct / 100.0) else 0.0
-    val runnerUpPrize = if (financesEnabled) totalPool * (runnerUpPct / 100.0) else 0.0
-    val topScorerPrize = if (financesEnabled) totalPool * (topScorerPct / 100.0) else 0.0
-    val bestGkPrize = if (financesEnabled) totalPool * (bestGkPct / 100.0) else 0.0
+    val championPrize = if (financesEnabled) totalPool * ((percentages[PrizeCategory.CHAMPION] ?: 50f).toDouble() / 100.0) else 0.0
+    val runnerUpPrize = if (financesEnabled) totalPool * ((percentages[PrizeCategory.RUNNER_UP] ?: 25f).toDouble() / 100.0) else 0.0
+    val topScorerPrize = if (financesEnabled) totalPool * ((percentages[PrizeCategory.TOP_SCORER] ?: 15f).toDouble() / 100.0) else 0.0
+    val bestGkPrize = if (financesEnabled) totalPool * ((percentages[PrizeCategory.BEST_GK] ?: 10f).toDouble() / 100.0) else 0.0
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -144,7 +145,7 @@ fun CreateTournamentWizardDialog(
                             text = when (step) {
                                 1 -> "Paso 1: Configuración General"
                                 2 -> "Paso 2: Selección de Equipos"
-                                3 -> "Paso 3: Finanzas y Premios (%)"
+                                3 -> "Paso 3: Finanzas y Premios (100%)"
                                 else -> "Paso 4: Resumen y Fixture"
                             },
                             style = MaterialTheme.typography.titleMedium,
@@ -210,7 +211,7 @@ fun CreateTournamentWizardDialog(
                                     OutlinedTextField(
                                         value = playersPerTeam.toString(),
                                         onValueChange = { playersPerTeam = it.toIntOrNull() ?: 7 },
-                                        label = { Text("Jugadores (ej: 7, 11)") },
+                                        label = { Text("Jugadores/Equipo") },
                                         singleLine = true,
                                         modifier = Modifier.weight(1f)
                                     )
@@ -222,12 +223,11 @@ fun CreateTournamentWizardDialog(
                                     fontSize = 13.sp
                                 )
 
-                                // Visual diagram cards for tournament types
                                 val types = listOf(
                                     Triple(TournamentModes.LEAGUE, "Liga (Todos vs Todos)", "Calendario matemático completo de jornadas."),
                                     Triple(TournamentModes.CUP, "Copa (Eliminatoria Directa)", "Partidos de eliminación directa hasta la Gran Final."),
-                                    Triple(TournamentModes.GROUPS_CUP, "Fase de Grupos + Playoffs", "Grupos clasificatorios seguidos de eliminatoria."),
-                                    Triple(TournamentModes.MIXED, "Mixto (Liga + Liguilla)", "Tabla general y liguilla entre los mejores.")
+                                    Triple(TournamentModes.GROUPS_CUP, "Fase de Grupos + Playoffs", "Grupos clasificatorios (Top 2 avanzan) seguidos de eliminatoria."),
+                                    Triple(TournamentModes.MIXED, "Mixto (Liga + Eliminatoria)", "Fase regular de tabla general seguida de eliminatoria.")
                                 )
 
                                 types.forEach { (tKey, tTitle, tDesc) ->
@@ -267,6 +267,22 @@ fun CreateTournamentWizardDialog(
                                                 Text(tDesc, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                         }
+                                    }
+                                }
+
+                                if (tournamentType == TournamentModes.LEAGUE) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Partidos de Ida y Vuelta", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            Text("Genera doble enfrentamiento alternando localía", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Switch(checked = homeAndAway, onCheckedChange = { homeAndAway = it })
                                     }
                                 }
 
@@ -381,7 +397,7 @@ fun CreateTournamentWizardDialog(
                             }
                         }
                         3 -> {
-                            // Step 3: Finanzas y Premios por Porcentajes
+                            // Step 3: Finanzas y Premios por Porcentajes Auto-balanceados a 100%
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -427,42 +443,62 @@ fun CreateTournamentWizardDialog(
                                         }
                                     }
 
-                                    Text("Reparto de Premios por Porcentaje:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("Reparto Proporcional (Auto-balanceado al 100%):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
 
                                     // Champion %
+                                    val chPct = percentages[PrizeCategory.CHAMPION] ?: 50f
                                     Column {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text("Campeón: ${champPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            Text("Campeón: ${chPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                             Text("$${"%.2f".format(championPrize)}", color = Color(0xFF10B981), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                         }
-                                        Slider(value = champPct, onValueChange = { champPct = it }, valueRange = 0f..100f)
+                                        Slider(
+                                            value = chPct,
+                                            onValueChange = { percentages = PrizeCalculator.rebalancePercentages(PrizeCategory.CHAMPION, it, percentages) },
+                                            valueRange = 0f..100f
+                                        )
                                     }
 
                                     // Runner Up %
+                                    val ruPct = percentages[PrizeCategory.RUNNER_UP] ?: 25f
                                     Column {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text("Subcampeón: ${runnerUpPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            Text("Subcampeón: ${ruPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                             Text("$${"%.2f".format(runnerUpPrize)}", color = Color(0xFF3B82F6), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                         }
-                                        Slider(value = runnerUpPct, onValueChange = { runnerUpPct = it }, valueRange = 0f..100f)
+                                        Slider(
+                                            value = ruPct,
+                                            onValueChange = { percentages = PrizeCalculator.rebalancePercentages(PrizeCategory.RUNNER_UP, it, percentages) },
+                                            valueRange = 0f..100f
+                                        )
                                     }
 
                                     // Top Scorer %
+                                    val scPct = percentages[PrizeCategory.TOP_SCORER] ?: 15f
                                     Column {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text("Máximo Goleador: ${topScorerPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            Text("Máximo Goleador: ${scPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                             Text("$${"%.2f".format(topScorerPrize)}", color = Color(0xFFEC4899), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                         }
-                                        Slider(value = topScorerPct, onValueChange = { topScorerPct = it }, valueRange = 0f..100f)
+                                        Slider(
+                                            value = scPct,
+                                            onValueChange = { percentages = PrizeCalculator.rebalancePercentages(PrizeCategory.TOP_SCORER, it, percentages) },
+                                            valueRange = 0f..100f
+                                        )
                                     }
 
                                     // Best GK %
+                                    val gkPct = percentages[PrizeCategory.BEST_GK] ?: 10f
                                     Column {
                                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text("Valla Menos Vencida: ${bestGkPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            Text("Valla Menos Vencida: ${gkPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                             Text("$${"%.2f".format(bestGkPrize)}", color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                         }
-                                        Slider(value = bestGkPct, onValueChange = { bestGkPct = it }, valueRange = 0f..100f)
+                                        Slider(
+                                            value = gkPct,
+                                            onValueChange = { percentages = PrizeCalculator.rebalancePercentages(PrizeCategory.BEST_GK, it, percentages) },
+                                            valueRange = 0f..100f
+                                        )
                                     }
                                 } else {
                                     Text(
@@ -489,6 +525,9 @@ fun CreateTournamentWizardDialog(
                                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Text(name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                                         Text("Edición: $edition • Formato: $tournamentType", fontSize = 12.sp)
+                                        if (tournamentType == TournamentModes.LEAGUE) {
+                                            Text("Modalidad: ${if (homeAndAway) "Ida y Vuelta (Doble Partido)" else "Solo Ida"}", fontSize = 12.sp)
+                                        }
                                         Text("Duración por partido: $durationMinutes minutos", fontSize = 12.sp)
                                         Text("Clubes participantes: ${selectedTeamIds.size}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                     }
@@ -500,11 +539,11 @@ fun CreateTournamentWizardDialog(
                                         shape = RoundedCornerShape(14.dp)
                                     ) {
                                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            Text("Premios Asignados:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                            Text("• Campeón: $${"%.2f".format(championPrize)} (${champPct.toInt()}%)", fontSize = 12.sp)
-                                            Text("• Subcampeón: $${"%.2f".format(runnerUpPrize)} (${runnerUpPct.toInt()}%)", fontSize = 12.sp)
-                                            Text("• Goleador: $${"%.2f".format(topScorerPrize)} (${topScorerPct.toInt()}%)", fontSize = 12.sp)
-                                            Text("• Valla Menos Vencida: $${"%.2f".format(bestGkPrize)} (${bestGkPct.toInt()}%)", fontSize = 12.sp)
+                                            Text("Premios Asignados (100%):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            Text("• Campeón: $${"%.2f".format(championPrize)} (${(percentages[PrizeCategory.CHAMPION] ?: 50f).toInt()}%)", fontSize = 12.sp)
+                                            Text("• Subcampeón: $${"%.2f".format(runnerUpPrize)} (${(percentages[PrizeCategory.RUNNER_UP] ?: 25f).toInt()}%)", fontSize = 12.sp)
+                                            Text("• Goleador: $${"%.2f".format(topScorerPrize)} (${(percentages[PrizeCategory.TOP_SCORER] ?: 15f).toInt()}%)", fontSize = 12.sp)
+                                            Text("• Valla Menos Vencida: $${"%.2f".format(bestGkPrize)} (${(percentages[PrizeCategory.BEST_GK] ?: 10f).toInt()}%)", fontSize = 12.sp)
                                         }
                                     }
                                 }
@@ -574,7 +613,8 @@ fun CreateTournamentWizardDialog(
                                     championPrize,
                                     runnerUpPrize,
                                     topScorerPrize,
-                                    bestGkPrize
+                                    bestGkPrize,
+                                    homeAndAway
                                 )
                             },
                             enabled = name.isNotBlank() && selectedTeamIds.size >= 2,

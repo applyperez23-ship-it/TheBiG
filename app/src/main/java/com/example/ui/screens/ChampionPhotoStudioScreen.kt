@@ -1,7 +1,6 @@
 package com.example.ui.screens
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -31,11 +29,11 @@ import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,7 +57,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.TheBiGApp
@@ -68,10 +66,14 @@ import com.example.data.local.entity.Tournament
 import com.example.domain.rules.AssisterStat
 import com.example.domain.rules.GoalkeeperStat
 import com.example.domain.rules.ScorerStat
+import com.example.util.ChampionAwardInfo
+import com.example.util.ChampionStudioHelper
 import com.example.util.GraphicCardGenerator
 import com.example.util.ImageEnhancer
 import com.example.util.TeamCrestView
-import com.example.util.TeamJerseyView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,11 +89,13 @@ fun ChampionPhotoStudioScreen(
     BackHandler { onBack() }
     val context = LocalContext.current
     val app = TheBiGApp.instance
+    val scope = rememberCoroutineScope()
 
     var players by remember { mutableStateOf(teamPlayers) }
     var customPhotoBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isEnhancedWithAi by remember { mutableStateOf(false) }
     var generatedCardBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var isGenerating by remember { mutableStateOf(false) }
 
     LaunchedEffect(championTeam.id, teamPlayers) {
         if (teamPlayers.isNotEmpty()) {
@@ -101,37 +105,47 @@ fun ChampionPhotoStudioScreen(
         }
     }
 
-    // Photo picker launcher (using Android Photo Picker contract without broad permissions)
+    // Photo picker launcher (using Android GetContent contract with safe sampled decoding)
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let {
-            try {
-                val inputStream = context.contentResolver.openInputStream(it)
-                val originalBitmap = BitmapFactory.decodeStream(inputStream)
-                inputStream?.close()
-                customPhotoBitmap = originalBitmap
-                isEnhancedWithAi = false
-            } catch (e: Exception) {
-                e.printStackTrace()
+        uri?.let { selectedUri ->
+            scope.launch {
+                isGenerating = true
+                try {
+                    val sampled = ChampionStudioHelper.decodeSampledBitmapFromUri(context, selectedUri, 1280, 720)
+                    customPhotoBitmap = sampled
+                    isEnhancedWithAi = false
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    isGenerating = false
+                }
             }
         }
     }
 
-    // Recompute generated bitmap when dependencies change
+    // Recompute generated bitmap on Dispatchers.IO when dependencies change
     LaunchedEffect(players, customPhotoBitmap, isEnhancedWithAi) {
-        val photoToUse = if (isEnhancedWithAi && customPhotoBitmap != null) {
-            ImageEnhancer.enhanceCrestOrPhoto(customPhotoBitmap!!)
-        } else {
-            customPhotoBitmap
-        }
+        isGenerating = true
+        withContext(Dispatchers.IO) {
+            val photoToUse = if (isEnhancedWithAi && customPhotoBitmap != null) {
+                ImageEnhancer.enhanceCrestOrPhoto(customPhotoBitmap!!)
+            } else {
+                customPhotoBitmap
+            }
 
-        generatedCardBitmap = GraphicCardGenerator.generateChampionFrameBitmap(
-            tournament = tournament,
-            championTeam = championTeam,
-            players = players,
-            customPhoto = photoToUse
-        )
+            val card = GraphicCardGenerator.generateChampionFrameBitmap(
+                tournament = tournament,
+                championTeam = championTeam,
+                players = players,
+                customPhoto = photoToUse
+            )
+            withContext(Dispatchers.Main) {
+                generatedCardBitmap = card
+                isGenerating = false
+            }
+        }
     }
 
     Scaffold(
@@ -140,7 +154,7 @@ fun ChampionPhotoStudioScreen(
                 title = {
                     Column {
                         Text(
-                            text = "Cuadro del Campeon",
+                            text = "Cuadro del Campeón",
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp
                         )
@@ -163,12 +177,12 @@ fun ChampionPhotoStudioScreen(
                                 GraphicCardGenerator.shareBitmap(
                                     context = context,
                                     bitmap = bmp,
-                                    title = "Cuadro del Campeon - ${championTeam.name} (${tournament.name})"
+                                    title = "Cuadro del Campeón - ${championTeam.name} (${tournament.name})"
                                 )
                             }
                         }
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = "Exportar Tarjeta 1:1")
+                        Icon(Icons.Default.Share, contentDescription = "Compartir Imagen")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -206,7 +220,7 @@ fun ChampionPhotoStudioScreen(
                             Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "CAMPEON OFICIAL",
+                                text = "CAMPEÓN OFICIAL",
                                 color = Color(0xFFF59E0B),
                                 fontWeight = FontWeight.Black,
                                 fontSize = 12.sp
@@ -220,7 +234,7 @@ fun ChampionPhotoStudioScreen(
                         val captain = players.firstOrNull { it.isCaptain }
                         if (captain != null) {
                             Text(
-                                text = "Capitan: ${captain.name} (#${captain.number})",
+                                text = "Capitán: ${captain.name} (#${captain.dorsal})",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -244,7 +258,7 @@ fun ChampionPhotoStudioScreen(
                         fontSize = 15.sp
                     )
                     Text(
-                        text = "Puedes usar el escudo vectorial en alta definición o subir una foto grupal del equipo campeón para procesarla con el filtro gráfico de nitidez y contraste.",
+                        text = "Sube una foto grupal del equipo campeón para integrarla al diseño oficial con fecha de premiación (${ChampionAwardInfo.getCurrentMonthYearSpanish()}) y marca de agua TheBiG.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -286,20 +300,24 @@ fun ChampionPhotoStudioScreen(
                 fontSize = 15.sp
             )
 
-            generatedCardBitmap?.let { bmp ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .border(2.dp, Color(0xFFF59E0B), RoundedCornerShape(16.dp))
-                        .background(Color.Black, RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        bitmap = bmp.asImageBitmap(),
-                        contentDescription = "Tarjeta de Campeon Oficial",
-                        modifier = Modifier.fillMaxSize()
-                    )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .border(2.dp, Color(0xFFF59E0B), RoundedCornerShape(16.dp))
+                    .background(Color.Black, RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isGenerating) {
+                    CircularProgressIndicator(color = Color(0xFFF59E0B))
+                } else {
+                    generatedCardBitmap?.let { bmp ->
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "Tarjeta de Campeón Oficial",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
             }
 
@@ -310,7 +328,7 @@ fun ChampionPhotoStudioScreen(
                         GraphicCardGenerator.shareBitmap(
                             context = context,
                             bitmap = bmp,
-                            title = "Cuadro del Campeon Oficial - ${championTeam.name}"
+                            title = "Cuadro del Campeón Oficial - ${championTeam.name}"
                         )
                     }
                 },

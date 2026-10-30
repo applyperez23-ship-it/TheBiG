@@ -24,9 +24,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.Lock
@@ -43,6 +43,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,19 +53,14 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -146,16 +142,29 @@ fun MatchLiveSheetScreen(
         return
     }
 
-    // Display formatted referee clock: "04:37 / 20:00 - Restan 15:23"
+    val matchDuration = tournament?.matchDurationMinutes ?: 20
+
+    // Formatted referee clock display
     val clockString = if (liveTimerState.matchId == matchId && currentMatch.status == "LIVE") {
         liveTimerState.fullClockDisplay
     } else {
-        val totalMinutes = tournament?.matchDurationMinutes ?: 20
         val elapsed = currentMatch.elapsedSeconds
         val elapsedStr = "%02d:%02d".format(elapsed / 60, elapsed % 60)
-        val remaining = ((totalMinutes * 60) - elapsed).coerceAtLeast(0)
+        val remaining = ((matchDuration * 60) - elapsed).coerceAtLeast(0)
         val remainingStr = "%02d:%02d".format(remaining / 60, remaining % 60)
-        "$elapsedStr / %02d:00 - Restan $remainingStr".format(totalMinutes)
+        "$elapsedStr / %02d:00 - Restan $remainingStr".format(matchDuration)
+    }
+
+    val currentPeriod = if (liveTimerState.matchId == matchId && currentMatch.status == "LIVE") {
+        liveTimerState.currentPeriod
+    } else {
+        val halfTime = (matchDuration * 60) / 2
+        when {
+            currentMatch.elapsedSeconds >= matchDuration * 60 -> "Finalizado"
+            currentMatch.elapsedSeconds > halfTime -> "2do Tiempo"
+            currentMatch.elapsedSeconds == halfTime -> "Descanso"
+            else -> "1er Tiempo"
+        }
     }
 
     val currentMinute = if (liveTimerState.matchId == matchId && currentMatch.status == "LIVE") {
@@ -175,7 +184,7 @@ fun MatchLiveSheetScreen(
                             fontSize = 18.sp
                         )
                         Text(
-                            text = "${tournament?.name ?: "TheBiG"} - ${currentMatch.roundName}",
+                            text = "${tournament?.name ?: "TheBiG"} • ${currentMatch.roundName}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -191,7 +200,7 @@ fun MatchLiveSheetScreen(
                         onClick = {
                             val summary = buildString {
                                 appendLine("Acta Oficial TheBiG")
-                                appendLine("${tournament?.name} - ${currentMatch.roundName}")
+                                appendLine("${tournament?.name} • ${currentMatch.roundName}")
                                 appendLine("${homeTeam?.name} ${currentMatch.homeScore} - ${currentMatch.awayScore} ${awayTeam?.name}")
                                 if (currentMatch.homePenalties != null) {
                                     appendLine("Penaltis: ${currentMatch.homePenalties} - ${currentMatch.awayPenalties}")
@@ -229,11 +238,11 @@ fun MatchLiveSheetScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Live Referee Clock Card
+            // Live Referee Clock Card with Period Tag
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
                 ),
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -243,6 +252,21 @@ fun MatchLiveSheetScreen(
                         .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // Period badge
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    ) {
+                        Text(
+                            text = currentPeriod.uppercase(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                        )
+                    }
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
@@ -257,7 +281,7 @@ fun MatchLiveSheetScreen(
                         Text(
                             text = clockString,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 16.sp,
+                            fontSize = 15.sp,
                             color = MaterialTheme.colorScheme.primary,
                             textAlign = TextAlign.Center
                         )
@@ -274,7 +298,7 @@ fun MatchLiveSheetScreen(
                             Button(
                                 onClick = {
                                     if (homeTeam != null && awayTeam != null) {
-                                        viewModel.startLiveMatch(context, currentMatch, homeTeam!!, awayTeam!!)
+                                        viewModel.startLiveMatch(context, currentMatch, homeTeam!!, awayTeam!!, matchDuration)
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
@@ -285,7 +309,16 @@ fun MatchLiveSheetScreen(
                                 Text("Iniciar Partido")
                             }
                         } else if (currentMatch.status == "LIVE") {
-                            if (liveTimerState.isRunning) {
+                            if (currentPeriod == "Descanso") {
+                                Button(
+                                    onClick = { viewModel.startSecondHalf(context) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Iniciar 2do Tiempo")
+                                }
+                            } else if (liveTimerState.isRunning) {
                                 OutlinedButton(
                                     onClick = { viewModel.pauseLiveMatch(context) },
                                     modifier = Modifier.testTag("pause_match_button")
@@ -335,7 +368,7 @@ fun MatchLiveSheetScreen(
                                     Text(
                                         text = "ACTA CERRADA • PARTIDO CONCLUIDO",
                                         fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 14.sp,
+                                        fontSize = 13.sp,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -352,7 +385,7 @@ fun MatchLiveSheetScreen(
                 }
             }
 
-            // Scoreboard Header Card (Direct Scoreboard Tapping to Score Goals)
+            // Scoreboard Card with High-Contrast Active vs Inactive Team Switcher
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -366,7 +399,7 @@ fun MatchLiveSheetScreen(
                 ) {
                     if (currentMatch.status != "FINISHED") {
                         Text(
-                            text = "Toca el escudo o equipo para anotar gol rápido",
+                            text = "Toca el escudo de un equipo para registrar gol directo:",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold
@@ -380,6 +413,7 @@ fun MatchLiveSheetScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         // Home Team Interactive Column
+                        val isHomeActive = goalTargetTeam?.id == homeTeam?.id
                         Card(
                             modifier = Modifier
                                 .weight(1f)
@@ -388,9 +422,13 @@ fun MatchLiveSheetScreen(
                                     showGoalDialog = true
                                 }
                                 .testTag("scoreboard_home_team"),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = if (isHomeActive) 2.dp else 1.dp,
+                                color = if (isHomeActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                            ),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (currentMatch.status != "FINISHED") MaterialTheme.colorScheme.surface.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                                containerColor = if (isHomeActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface
                             )
                         ) {
                             Column(
@@ -399,16 +437,16 @@ fun MatchLiveSheetScreen(
                                     .fillMaxWidth()
                                     .padding(8.dp)
                             ) {
-                                TeamCrestView(team = homeTeam, size = 50.dp)
+                                TeamCrestView(team = homeTeam, size = 48.dp)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 homeTeam?.let { tm ->
-                                    TeamJerseyView(team = tm, size = 32.dp)
+                                    TeamJerseyView(team = tm, size = 28.dp)
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = homeTeam?.name ?: "Local",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
+                                    fontSize = 13.sp,
                                     textAlign = TextAlign.Center,
                                     maxLines = 1
                                 )
@@ -448,7 +486,7 @@ fun MatchLiveSheetScreen(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "Penaltis: ${currentMatch.homePenalties} - ${currentMatch.awayPenalties}",
-                                    fontSize = 12.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -456,6 +494,7 @@ fun MatchLiveSheetScreen(
                         }
 
                         // Away Team Interactive Column
+                        val isAwayActive = goalTargetTeam?.id == awayTeam?.id
                         Card(
                             modifier = Modifier
                                 .weight(1f)
@@ -464,9 +503,13 @@ fun MatchLiveSheetScreen(
                                     showGoalDialog = true
                                 }
                                 .testTag("scoreboard_away_team"),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = if (isAwayActive) 2.dp else 1.dp,
+                                color = if (isAwayActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                            ),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (currentMatch.status != "FINISHED") MaterialTheme.colorScheme.surface.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                                containerColor = if (isAwayActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface
                             )
                         ) {
                             Column(
@@ -475,16 +518,16 @@ fun MatchLiveSheetScreen(
                                     .fillMaxWidth()
                                     .padding(8.dp)
                             ) {
-                                TeamCrestView(team = awayTeam, size = 50.dp)
+                                TeamCrestView(team = awayTeam, size = 48.dp)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 awayTeam?.let { tm ->
-                                    TeamJerseyView(team = tm, size = 32.dp)
+                                    TeamJerseyView(team = tm, size = 28.dp)
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = awayTeam?.name ?: "Visitante",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
+                                    fontSize = 13.sp,
                                     textAlign = TextAlign.Center,
                                     maxLines = 1
                                 )
@@ -506,7 +549,7 @@ fun MatchLiveSheetScreen(
             Text(
                 text = "Acciones e Incidencias Oficiales",
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
+                fontSize = 15.sp
             )
 
             if (currentMatch.status != "FINISHED") {
@@ -596,7 +639,7 @@ fun MatchLiveSheetScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Acta cerrada. El marcador y las incidencias están protegidos contra modificaciones accidentales.",
+                            text = "Acta cerrada. El marcador y las incidencias están protegidos contra modificaciones.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -608,9 +651,9 @@ fun MatchLiveSheetScreen(
 
             // Timeline / Chronology of Events
             Text(
-                text = "Cronologia de Incidencias (${events.size})",
+                text = "Cronología de Incidencias (${events.size})",
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
+                fontSize = 15.sp
             )
 
             if (events.isEmpty()) {
@@ -619,7 +662,7 @@ fun MatchLiveSheetScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                 ) {
                     Text(
-                        text = "Aun no se han registrado incidencias en este partido.",
+                        text = "Aún no se han registrado incidencias en este partido.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(16.dp),
@@ -649,7 +692,7 @@ fun MatchLiveSheetScreen(
             Text(
                 text = "Alineaciones y Capitanes",
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
+                fontSize = 15.sp
             )
 
             RosterPreviewCard(
@@ -669,13 +712,10 @@ fun MatchLiveSheetScreen(
     // Defensive Deletion Dialog for Event
     eventToDelete?.let { ev ->
         DeleteConfirmationDialog(
-            title = "Eliminar Incidencia",
-            message = "Estas seguro de eliminar esta incidencia (${ev.eventType} en el minuto ${ev.minute}')? Si es un gol, el marcador se actualizara en consecuencia.",
+            itemName = "la incidencia (${ev.eventType} en el minuto ${ev.minute}')",
+            onDismiss = { eventToDelete = null },
             onConfirm = {
                 viewModel.deleteEvent(ev)
-                eventToDelete = null
-            },
-            onDismiss = {
                 eventToDelete = null
             }
         )
@@ -692,7 +732,7 @@ fun MatchLiveSheetScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.startLiveMatch(context, currentMatch, homeTeam!!, awayTeam!!)
+                        viewModel.startLiveMatch(context, currentMatch, homeTeam!!, awayTeam!!, matchDuration)
                         showReopenDialog = false
                     }
                 ) {
@@ -707,9 +747,9 @@ fun MatchLiveSheetScreen(
         )
     }
 
-    // Dialog 1: Add Goal with Mandatory Strict Player Selection
+    // Dialog 1: Add Goal with 2-step Modal (Step 1: Scorer, Step 2: Assist)
     if (showGoalDialog && homeTeam != null && awayTeam != null) {
-        GoalIncidentDialog(
+        TwoStepGoalIncidentDialog(
             homeTeam = homeTeam!!,
             awayTeam = awayTeam!!,
             initialTeam = goalTargetTeam,
@@ -845,6 +885,63 @@ fun MatchLiveSheetScreen(
 }
 
 @Composable
+fun ActionIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tint: Color,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(6.dp)
+            .testTag(testTag)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(tint.copy(alpha = 0.15f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+fun ActionCardIconButton(
+    label: String,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(6.dp)
+            .testTag(testTag)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(Color(0xFFF59E0B).copy(alpha = 0.15f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(8.dp, 12.dp).background(Color(0xFFF59E0B), RoundedCornerShape(1.dp)))
+                Box(modifier = Modifier.size(8.dp, 12.dp).background(Color(0xFFEF4444), RoundedCornerShape(1.dp)))
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
 fun IncidentTimelineItem(
     event: MatchEvent,
     team: Team?,
@@ -868,20 +965,16 @@ fun IncidentTimelineItem(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Minute Badge
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                            CircleShape
-                        ),
+                        .size(34.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "${event.minute}'",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -892,48 +985,40 @@ fun IncidentTimelineItem(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         when (event.eventType) {
                             "GOAL" -> {
-                                Icon(Icons.Default.SportsSoccer, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.SportsSoccer, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Gol", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Gol", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                             "PENALTY_GOAL" -> {
-                                Icon(Icons.Default.SportsSoccer, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.SportsSoccer, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Gol de Penal", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                                Text("Gol de Penal", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
                             }
                             "OWN_GOAL" -> {
-                                Text("Autogol", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.error)
+                                Text("Autogol", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                             }
                             "PENALTY_MISSED" -> {
-                                Text("Penal Atajado/Fallado", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.error)
+                                Text("Penal Atajado/Fallado", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                             }
                             "YELLOW_CARD" -> {
-                                Box(
-                                    modifier = Modifier
-                                        .size(10.dp, 14.dp)
-                                        .background(Color(0xFFF59E0B), RoundedCornerShape(2.dp))
-                                )
+                                Box(modifier = Modifier.size(9.dp, 13.dp).background(Color(0xFFF59E0B), RoundedCornerShape(2.dp)))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Tarjeta Amarilla", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Tarjeta Amarilla", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                             "RED_CARD" -> {
-                                Box(
-                                    modifier = Modifier
-                                        .size(10.dp, 14.dp)
-                                        .background(Color(0xFFEF4444), RoundedCornerShape(2.dp))
-                                )
+                                Box(modifier = Modifier.size(9.dp, 13.dp).background(Color(0xFFEF4444), RoundedCornerShape(2.dp)))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Tarjeta Roja", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFFEF4444))
+                                Text("Tarjeta Roja", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFEF4444))
                             }
                             "SUBSTITUTION" -> {
-                                Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Cambio", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Cambio", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                             "MVP" -> {
-                                Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Jugador MVP", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFFF59E0B))
+                                Text("Jugador MVP", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFF59E0B))
                             }
                         }
                     }
@@ -941,23 +1026,17 @@ fun IncidentTimelineItem(
                     val playerText = buildString {
                         if (player != null) {
                             append(player.name)
-                            if (player.number > 0) append(" (#${player.number})")
+                            if (player.dorsal > 0) append(" (#${player.dorsal})")
                             if (player.isCaptain) append(" (C)")
-                        } else {
-                            append("Jugador no asignado")
                         }
                         if (assistPlayer != null) {
-                            append(" - Asist: ${assistPlayer.name}")
+                            append(" • Asist: ${assistPlayer.name}")
                         }
                         if (team != null) {
-                            append(" [${team.name}]")
+                            append(" • ${team.name}")
                         }
                     }
-                    Text(
-                        text = playerText,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(text = playerText, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
@@ -965,8 +1044,8 @@ fun IncidentTimelineItem(
                 IconButton(onClick = onDelete) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Borrar Incidencia",
-                        tint = MaterialTheme.colorScheme.error,
+                        contentDescription = "Eliminar incidencia",
+                        tint = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -983,17 +1062,11 @@ fun RosterPreviewCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = title,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
-            )
+            Text(text = title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(6.dp))
             if (players.isEmpty()) {
                 Text(
@@ -1010,43 +1083,39 @@ fun RosterPreviewCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "#${p.number}",
+                            text = "#${p.dorsal}",
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.width(30.dp)
                         )
-                        Text(
-                            text = p.name,
-                            fontSize = 13.sp,
-                            modifier = Modifier.weight(1f)
-                        )
+                        Text(text = p.name, fontSize = 13.sp, modifier = Modifier.weight(1f))
                         if (p.isCaptain) {
-                            Box(
-                                modifier = Modifier
-                                    .background(Color(0xFFF59E0B), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            Surface(
+                                color = Color(0xFFF59E0B),
+                                shape = RoundedCornerShape(4.dp),
+                                modifier = Modifier.padding(end = 6.dp)
                             ) {
                                 Text(
-                                    text = "CAPITAN (C)",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.Black
+                                    text = "CAPITÁN (C)",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.Black,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.width(6.dp))
                         }
                         if (p.isGoalkeeper) {
-                            Box(
-                                modifier = Modifier
-                                    .background(Color(0xFF10B981), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            Surface(
+                                color = Color(0xFF10B981),
+                                shape = RoundedCornerShape(4.dp)
                             ) {
                                 Text(
                                     text = "PORTERO",
-                                    fontSize = 10.sp,
+                                    fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
                         }
@@ -1057,9 +1126,13 @@ fun RosterPreviewCard(
     }
 }
 
-// Dialog: Goal with strict 1-touch player selection
+/**
+ * 2-Step Goal Dialog:
+ * Step 1: Scorer selection (and team + goal type + minute)
+ * Step 2: Assist selection (with prominent "Sin Asistencia" button)
+ */
 @Composable
-fun GoalIncidentDialog(
+fun TwoStepGoalIncidentDialog(
     homeTeam: Team,
     awayTeam: Team,
     initialTeam: Team? = null,
@@ -1067,8 +1140,9 @@ fun GoalIncidentDialog(
     awayPlayers: List<Player>,
     defaultMinute: Int,
     onDismiss: () -> Unit,
-    onConfirm: (teamId: Long, authorId: Long?, assistId: Long?, isOwnGoal: Boolean, isPen: Boolean, minute: Int) -> Unit
+    onConfirm: (teamId: Long, authorId: Long, assistId: Long?, isOwnGoal: Boolean, isPen: Boolean, minute: Int) -> Unit
 ) {
+    var step by remember { mutableIntStateOf(1) } // 1: Scorer, 2: Assist
     var selectedTeamId by remember(initialTeam) { mutableLongStateOf(initialTeam?.id ?: homeTeam.id) }
     var selectedAuthorId by remember { mutableStateOf<Long?>(null) }
     var selectedAssistId by remember { mutableStateOf<Long?>(null) }
@@ -1080,7 +1154,12 @@ fun GoalIncidentDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Registrar Gol Oficial", fontWeight = FontWeight.Bold) },
+        title = {
+            Text(
+                text = if (step == 1) "Paso 1: Autor del Gol" else "Paso 2: ¿Quién dio la Asistencia?",
+                fontWeight = FontWeight.Bold
+            )
+        },
         text = {
             Column(
                 modifier = Modifier
@@ -1088,183 +1167,158 @@ fun GoalIncidentDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Select Scoring Team
-                Text("Equipo beneficiado con el Gol:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            selectedTeamId = homeTeam.id
-                            selectedAuthorId = null
-                            selectedAssistId = null
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (selectedTeamId == homeTeam.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(homeTeam.name, maxLines = 1, fontSize = 12.sp)
-                    }
-                    Button(
-                        onClick = {
-                            selectedTeamId = awayTeam.id
-                            selectedAuthorId = null
-                            selectedAssistId = null
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (selectedTeamId == awayTeam.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(awayTeam.name, maxLines = 1, fontSize = 12.sp)
-                    }
-                }
-
-                // Goal Type Options
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.Checkbox(
-                        checked = isPenalty,
-                        onCheckedChange = {
-                            isPenalty = it
-                            if (it) isOwnGoal = false
+                if (step == 1) {
+                    // Team selector
+                    Text("Equipo que anota:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                selectedTeamId = homeTeam.id
+                                selectedAuthorId = null
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (selectedTeamId == homeTeam.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(homeTeam.name, maxLines = 1, fontSize = 12.sp)
                         }
-                    )
-                    Text("Penal reglamentario", fontSize = 13.sp)
+                        Button(
+                            onClick = {
+                                selectedTeamId = awayTeam.id
+                                selectedAuthorId = null
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (selectedTeamId == awayTeam.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(awayTeam.name, maxLines = 1, fontSize = 12.sp)
+                        }
+                    }
 
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    androidx.compose.material3.Checkbox(
-                        checked = isOwnGoal,
-                        onCheckedChange = {
-                            isOwnGoal = it
-                            if (it) {
-                                isPenalty = false
-                                selectedAssistId = null
+                    // Goal Type Checkboxes
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = isPenalty,
+                            onCheckedChange = {
+                                isPenalty = it
+                                if (it) isOwnGoal = false
                             }
-                        }
-                    )
-                    Text("Autogol", fontSize = 13.sp)
-                }
-
-                // Minute Input
-                OutlinedTextField(
-                    value = minuteText,
-                    onValueChange = { minuteText = it },
-                    label = { Text("Minuto") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Mandatory Author Selection (Strict: 1 tap from active roster, no unassigned)
-                Text(
-                    text = if (isOwnGoal) "Jugador que anota en contra (Obligatorio):" else "Autor del Gol (Obligatorio - Plantilla Activa):",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = if (selectedAuthorId == null && !isOwnGoal) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                )
-
-                if (currentRoster.isEmpty()) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "Este equipo no tiene jugadores inscritos en su plantilla oficial. Registra jugadores en el menú Equipos para poder anotar goles.",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(10.dp)
                         )
+                        Text("Penal", fontSize = 12.sp)
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Checkbox(
+                            checked = isOwnGoal,
+                            onCheckedChange = {
+                                isOwnGoal = it
+                                if (it) isPenalty = false
+                            }
+                        )
+                        Text("Autogol", fontSize = 12.sp)
                     }
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, if (selectedAuthorId != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        currentRoster.forEach { player ->
-                            val isSelected = selectedAuthorId == player.id
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        selectedAuthorId = player.id
-                                        if (selectedAssistId == player.id) selectedAssistId = null
-                                    },
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else Color.Transparent
-                            ) {
-                                Row(
+
+                    OutlinedTextField(
+                        value = minuteText,
+                        onValueChange = { minuteText = it },
+                        label = { Text("Minuto") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = if (isOwnGoal) "Jugador en contra (Obligatorio):" else "Goleador (Obligatorio de la Plantilla):",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = if (selectedAuthorId == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                    )
+
+                    if (currentRoster.isEmpty()) {
+                        Text(
+                            text = "No hay jugadores en la plantilla de este equipo.",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp
+                        )
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                .padding(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            currentRoster.forEach { player ->
+                                val isSelected = selectedAuthorId == player.id
+                                Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .clickable { selectedAuthorId = player.id },
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent
                                 ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = {
-                                            selectedAuthorId = player.id
-                                            if (selectedAssistId == player.id) selectedAssistId = null
-                                        }
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "#${player.number} ${player.name}${if (player.isCaptain) " (C)" else ""}",
-                                        fontSize = 13.sp,
-                                        fontWeight = if (isSelected || player.isCaptain) FontWeight.Bold else FontWeight.Normal
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(
+                                            selected = isSelected,
+                                            onClick = { selectedAuthorId = player.id }
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "#${pDorsal(player.dorsal)} ${player.name}${if (player.isCaptain) " (C)" else ""}",
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }
+                } else {
+                    // Step 2: Assist
+                    Text(
+                        text = "Selecciona el jugador que dio el pase de gol o pulsa 'Sin Asistencia':",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
-                // Assist RadioButtons (if not own goal)
-                if (!isOwnGoal && currentRoster.isNotEmpty()) {
-                    Text("Asistidor (Opcional):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Button(
+                        onClick = {
+                            val minute = minuteText.toIntOrNull() ?: defaultMinute
+                            onConfirm(selectedTeamId, selectedAuthorId!!, null, isOwnGoal, isPenalty, minute)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Gol Directo (Sin Asistencia)")
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("O selecciona un asistidor:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+
+                    val assistCandidates = currentRoster.filter { it.id != selectedAuthorId }
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .padding(8.dp),
+                            .padding(6.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { selectedAssistId = null },
-                            shape = RoundedCornerShape(6.dp),
-                            color = if (selectedAssistId == null) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f) else Color.Transparent
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = selectedAssistId == null,
-                                    onClick = { selectedAssistId = null }
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Sin Asistencia", fontSize = 12.sp)
-                            }
-                        }
-
-                        currentRoster.filter { it.id != selectedAuthorId }.forEach { player ->
+                        assistCandidates.forEach { player ->
                             val isSelected = selectedAssistId == player.id
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { selectedAssistId = player.id },
                                 shape = RoundedCornerShape(6.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f) else Color.Transparent
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent
                             ) {
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     RadioButton(
@@ -1272,7 +1326,10 @@ fun GoalIncidentDialog(
                                         onClick = { selectedAssistId = player.id }
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("#${player.number} ${player.name}${if (player.isCaptain) " (C)" else ""}", fontSize = 12.sp)
+                                    Text(
+                                        text = "#${pDorsal(player.dorsal)} ${player.name}${if (player.isCaptain) " (C)" else ""}",
+                                        fontSize = 13.sp
+                                    )
                                 }
                             }
                         }
@@ -1281,24 +1338,45 @@ fun GoalIncidentDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    val minute = minuteText.toIntOrNull() ?: defaultMinute
-                    onConfirm(selectedTeamId, selectedAuthorId, selectedAssistId, isOwnGoal, isPenalty, minute)
-                },
-                enabled = selectedAuthorId != null,
-                modifier = Modifier.testTag("confirm_add_goal_button")
-            ) {
-                Text("Guardar Gol")
+            if (step == 1) {
+                Button(
+                    onClick = {
+                        if (isOwnGoal) {
+                            val minute = minuteText.toIntOrNull() ?: defaultMinute
+                            onConfirm(selectedTeamId, selectedAuthorId!!, null, true, false, minute)
+                        } else {
+                            step = 2
+                        }
+                    },
+                    enabled = selectedAuthorId != null,
+                    modifier = Modifier.testTag("confirm_step1_goal")
+                ) {
+                    Text(if (isOwnGoal) "Guardar Autogol" else "Siguiente (Asistencia)")
+                }
+            } else {
+                Button(
+                    onClick = {
+                        val minute = minuteText.toIntOrNull() ?: defaultMinute
+                        onConfirm(selectedTeamId, selectedAuthorId!!, selectedAssistId, isOwnGoal, isPenalty, minute)
+                    },
+                    modifier = Modifier.testTag("confirm_step2_goal")
+                ) {
+                    Text("Guardar Gol")
+                }
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
+            OutlinedButton(
+                onClick = {
+                    if (step == 2) step = 1 else onDismiss()
+                }
+            ) {
+                Text(if (step == 2) "Atrás" else "Cancelar")
+            }
         }
     )
 }
 
-// Dialog: Penalty in regular match (scored vs missed)
 @Composable
 fun PenaltyIncidentDialog(
     homeTeam: Team,
@@ -1307,7 +1385,7 @@ fun PenaltyIncidentDialog(
     awayPlayers: List<Player>,
     defaultMinute: Int,
     onDismiss: () -> Unit,
-    onConfirm: (teamId: Long, playerId: Long?, isScored: Boolean, minute: Int) -> Unit
+    onConfirm: (teamId: Long, playerId: Long, isScored: Boolean, minute: Int) -> Unit
 ) {
     var selectedTeamId by remember { mutableLongStateOf(homeTeam.id) }
     var selectedPlayerId by remember { mutableStateOf<Long?>(null) }
@@ -1326,7 +1404,7 @@ fun PenaltyIncidentDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Equipo ejecutante:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text("Equipo ejecutante:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { selectedTeamId = homeTeam.id; selectedPlayerId = null },
@@ -1348,8 +1426,7 @@ fun PenaltyIncidentDialog(
                     }
                 }
 
-                // Outcome
-                Text("Resultado del Penal:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text("Resultado del Penal:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { isScored = true },
@@ -1382,42 +1459,36 @@ fun PenaltyIncidentDialog(
                 Text(
                     text = "Ejecutante (Obligatorio de la Plantilla):",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     color = if (selectedPlayerId == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                 )
 
-                if (currentRoster.isEmpty()) {
-                    Text("No hay jugadores inscritos en este equipo.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, if (selectedPlayerId != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        currentRoster.forEach { player ->
-                            val isSelected = selectedPlayerId == player.id
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { selectedPlayerId = player.id },
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else Color.Transparent
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                        .padding(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    currentRoster.forEach { player ->
+                        val isSelected = selectedPlayerId == player.id
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedPlayerId = player.id },
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = { selectedPlayerId = player.id }
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("#${player.number} ${player.name}${if (player.isCaptain) " (C)" else ""}", fontSize = 13.sp)
-                                }
+                                RadioButton(selected = isSelected, onClick = { selectedPlayerId = player.id })
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "#${pDorsal(player.dorsal)} ${player.name}${if (player.isCaptain) " (C)" else ""}",
+                                    fontSize = 13.sp
+                                )
                             }
                         }
                     }
@@ -1427,8 +1498,8 @@ fun PenaltyIncidentDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val m = minuteText.toIntOrNull() ?: defaultMinute
-                    onConfirm(selectedTeamId, selectedPlayerId, isScored, m)
+                    val minute = minuteText.toIntOrNull() ?: defaultMinute
+                    onConfirm(selectedTeamId, selectedPlayerId!!, isScored, minute)
                 },
                 enabled = selectedPlayerId != null
             ) {
@@ -1441,7 +1512,6 @@ fun PenaltyIncidentDialog(
     )
 }
 
-// Dialog: Yellow / Red Card with Strict Player Selection
 @Composable
 fun CardIncidentDialog(
     homeTeam: Team,
@@ -1450,7 +1520,7 @@ fun CardIncidentDialog(
     awayPlayers: List<Player>,
     defaultMinute: Int,
     onDismiss: () -> Unit,
-    onConfirm: (teamId: Long, playerId: Long?, isRed: Boolean, minute: Int) -> Unit
+    onConfirm: (teamId: Long, playerId: Long, isRed: Boolean, minute: Int) -> Unit
 ) {
     var selectedTeamId by remember { mutableLongStateOf(homeTeam.id) }
     var selectedPlayerId by remember { mutableStateOf<Long?>(null) }
@@ -1461,7 +1531,7 @@ fun CardIncidentDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Registrar Sanción / Tarjeta", fontWeight = FontWeight.Bold) },
+        title = { Text("Amonestación o Expulsión", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier
@@ -1469,7 +1539,7 @@ fun CardIncidentDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Equipo sancionado:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text("Equipo sancionado:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { selectedTeamId = homeTeam.id; selectedPlayerId = null },
@@ -1491,7 +1561,7 @@ fun CardIncidentDialog(
                     }
                 }
 
-                Text("Tipo de Tarjeta (Alimenta el Pozo MVP):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text("Tipo de Tarjeta:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { isRed = false },
@@ -1500,7 +1570,7 @@ fun CardIncidentDialog(
                         ),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Amarilla", color = if (!isRed) Color.Black else Color.Unspecified, fontWeight = FontWeight.Bold)
+                        Text("Amarilla", fontSize = 12.sp)
                     }
                     Button(
                         onClick = { isRed = true },
@@ -1509,7 +1579,7 @@ fun CardIncidentDialog(
                         ),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Roja", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Roja Directa", fontSize = 12.sp)
                     }
                 }
 
@@ -1522,44 +1592,38 @@ fun CardIncidentDialog(
                 )
 
                 Text(
-                    text = "Jugador Sancionado (Obligatorio de la Plantilla):",
+                    text = "Jugador sancionado (Obligatorio):",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     color = if (selectedPlayerId == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                 )
 
-                if (currentRoster.isEmpty()) {
-                    Text("No hay jugadores inscritos en este equipo.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, if (selectedPlayerId != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        currentRoster.forEach { player ->
-                            val isSelected = selectedPlayerId == player.id
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { selectedPlayerId = player.id },
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else Color.Transparent
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                        .padding(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    currentRoster.forEach { player ->
+                        val isSelected = selectedPlayerId == player.id
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedPlayerId = player.id },
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = { selectedPlayerId = player.id }
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("#${player.number} ${player.name}${if (player.isCaptain) " (C)" else ""}", fontSize = 13.sp)
-                                }
+                                RadioButton(selected = isSelected, onClick = { selectedPlayerId = player.id })
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "#${pDorsal(player.dorsal)} ${player.name}${if (player.isCaptain) " (C)" else ""}",
+                                    fontSize = 13.sp
+                                )
                             }
                         }
                     }
@@ -1569,12 +1633,12 @@ fun CardIncidentDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val m = minuteText.toIntOrNull() ?: defaultMinute
-                    onConfirm(selectedTeamId, selectedPlayerId, isRed, m)
+                    val minute = minuteText.toIntOrNull() ?: defaultMinute
+                    onConfirm(selectedTeamId, selectedPlayerId!!, isRed, minute)
                 },
                 enabled = selectedPlayerId != null
             ) {
-                Text("Registrar Sanción")
+                Text("Guardar Tarjeta")
             }
         },
         dismissButton = {
@@ -1583,7 +1647,6 @@ fun CardIncidentDialog(
     )
 }
 
-// Dialog: Substitution with Strict Player Selection
 @Composable
 fun SubstitutionDialog(
     homeTeam: Team,
@@ -1592,18 +1655,18 @@ fun SubstitutionDialog(
     awayPlayers: List<Player>,
     defaultMinute: Int,
     onDismiss: () -> Unit,
-    onConfirm: (teamId: Long, playerOutId: Long?, playerInId: Long?, minute: Int) -> Unit
+    onConfirm: (teamId: Long, outId: Long, inId: Long, minute: Int) -> Unit
 ) {
     var selectedTeamId by remember { mutableLongStateOf(homeTeam.id) }
-    var selectedOutId by remember { mutableStateOf<Long?>(null) }
-    var selectedInId by remember { mutableStateOf<Long?>(null) }
+    var playerOutId by remember { mutableStateOf<Long?>(null) }
+    var playerInId by remember { mutableStateOf<Long?>(null) }
     var minuteText by remember { mutableStateOf(defaultMinute.toString()) }
 
     val currentRoster = if (selectedTeamId == homeTeam.id) homePlayers else awayPlayers
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Cambio Táctico", fontWeight = FontWeight.Bold) },
+        title = { Text("Sustitución Oficial", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier
@@ -1611,10 +1674,10 @@ fun SubstitutionDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Equipo:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text("Equipo:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = { selectedTeamId = homeTeam.id; selectedOutId = null; selectedInId = null },
+                        onClick = { selectedTeamId = homeTeam.id; playerOutId = null; playerInId = null },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (selectedTeamId == homeTeam.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                         ),
@@ -1623,7 +1686,7 @@ fun SubstitutionDialog(
                         Text(homeTeam.name, maxLines = 1, fontSize = 12.sp)
                     }
                     Button(
-                        onClick = { selectedTeamId = awayTeam.id; selectedOutId = null; selectedInId = null },
+                        onClick = { selectedTeamId = awayTeam.id; playerOutId = null; playerInId = null },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (selectedTeamId == awayTeam.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                         ),
@@ -1641,80 +1704,46 @@ fun SubstitutionDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Text(
-                    text = "Sale Jugador (Obligatorio):",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = if (selectedOutId == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                )
+                Text("Sale del campo:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, if (selectedOutId != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                        .padding(4.dp)
                 ) {
-                    currentRoster.forEach { player ->
-                        val isSelected = selectedOutId == player.id
-                        Surface(
+                    currentRoster.forEach { p ->
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { selectedOutId = player.id },
-                            shape = RoundedCornerShape(6.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f) else Color.Transparent
+                                .clickable { playerOutId = p.id }
+                                .padding(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = { selectedOutId = player.id }
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("#${player.number} ${player.name}", fontSize = 12.sp)
-                            }
+                            RadioButton(selected = playerOutId == p.id, onClick = { playerOutId = p.id })
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("#${pDorsal(p.dorsal)} ${p.name}", fontSize = 12.sp)
                         }
                     }
                 }
 
-                Text(
-                    text = "Entra Jugador (Obligatorio):",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = if (selectedInId == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                )
+                Text("Entra al campo:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, if (selectedInId != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                        .padding(4.dp)
                 ) {
-                    currentRoster.filter { it.id != selectedOutId }.forEach { player ->
-                        val isSelected = selectedInId == player.id
-                        Surface(
+                    currentRoster.filter { it.id != playerOutId }.forEach { p ->
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { selectedInId = player.id },
-                            shape = RoundedCornerShape(6.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent
+                                .clickable { playerInId = p.id }
+                                .padding(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = { selectedInId = player.id }
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("#${player.number} ${player.name}", fontSize = 12.sp)
-                            }
+                            RadioButton(selected = playerInId == p.id, onClick = { playerInId = p.id })
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("#${pDorsal(p.dorsal)} ${p.name}", fontSize = 12.sp)
                         }
                     }
                 }
@@ -1723,12 +1752,12 @@ fun SubstitutionDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val m = minuteText.toIntOrNull() ?: defaultMinute
-                    onConfirm(selectedTeamId, selectedOutId, selectedInId, m)
+                    val minute = minuteText.toIntOrNull() ?: defaultMinute
+                    onConfirm(selectedTeamId, playerOutId!!, playerInId!!, minute)
                 },
-                enabled = selectedOutId != null && selectedInId != null
+                enabled = playerOutId != null && playerInId != null
             ) {
-                Text("Registrar Cambio")
+                Text("Guardar Cambio")
             }
         },
         dismissButton = {
@@ -1737,7 +1766,6 @@ fun SubstitutionDialog(
     )
 }
 
-// Dialog: Shootout Score (Dedicated Penalty Shootout Mode)
 @Composable
 fun ShootoutScoreDialog(
     homeTeam: Team?,
@@ -1745,234 +1773,50 @@ fun ShootoutScoreDialog(
     initialHome: Int,
     initialAway: Int,
     onDismiss: () -> Unit,
-    onConfirm: (homePen: Int, awayPen: Int) -> Unit
+    onConfirm: (homePenalties: Int, awayPenalties: Int) -> Unit
 ) {
-    // History of shots: Pair(isHome: Boolean, isGoal: Boolean)
-    val kicks = remember { mutableStateListOf<Pair<Boolean, Boolean>>() }
-    var currentIsHome by remember { mutableStateOf(true) }
-
-    val homeGoals = kicks.count { it.first && it.second }
-    val awayGoals = kicks.count { !it.first && it.second }
-
-    val homeKicks = kicks.filter { it.first }
-    val awayKicks = kicks.filter { !it.first }
-
-    val roundsCount = maxOf(5, maxOf(homeKicks.size, awayKicks.size) + 1)
+    var homeStr by remember { mutableStateOf(initialHome.toString()) }
+    var awayStr by remember { mutableStateOf(initialAway.toString()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Tanda de Penaltis Oficial", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            }
-        },
+        title = { Text("Tanda de Penaltis", fontWeight = FontWeight.Bold) },
         text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                // Scoreboard Banner
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                            TeamCrestView(team = homeTeam, size = 38.dp)
-                            Text(homeTeam?.shortName ?: "LOC", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
-
-                        Text(
-                            text = "$homeGoals - $awayGoals",
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                            TeamCrestView(team = awayTeam, size = 38.dp)
-                            Text(awayTeam?.shortName ?: "VIS", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
-                    }
-                }
-
-                // Visual Indicator Circles for Home Team
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "${homeTeam?.name ?: "Local"} (${homeKicks.size} tiros):",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (i in 0 until roundsCount) {
-                            val kick = homeKicks.getOrNull(i)
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .background(
-                                        color = when {
-                                            kick == null -> Color.Gray.copy(alpha = 0.25f)
-                                            kick.second -> Color(0xFF10B981) // Gol
-                                            else -> Color(0xFFEF4444) // Fallado
-                                        },
-                                        shape = CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (kick != null) {
-                                    Icon(
-                                        imageVector = if (kick.second) Icons.Default.Check else Icons.Default.Close,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Visual Indicator Circles for Away Team
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "${awayTeam?.name ?: "Visitante"} (${awayKicks.size} tiros):",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (i in 0 until roundsCount) {
-                            val kick = awayKicks.getOrNull(i)
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .background(
-                                        color = when {
-                                            kick == null -> Color.Gray.copy(alpha = 0.25f)
-                                            kick.second -> Color(0xFF10B981) // Gol
-                                            else -> Color(0xFFEF4444) // Fallado
-                                        },
-                                        shape = CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (kick != null) {
-                                    Icon(
-                                        imageVector = if (kick.second) Icons.Default.Check else Icons.Default.Close,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Turn Indicator
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                    )
-                ) {
-                    Text(
-                        text = "Turno de tiro: ${if (currentIsHome) homeTeam?.name ?: "Local" else awayTeam?.name ?: "Visitante"}",
-                        modifier = Modifier.padding(10.dp),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                // Action Buttons: Gol & Fallado
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            kicks.add(Pair(currentIsHome, true))
-                            currentIsHome = !currentIsHome
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                    ) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("GOL", fontWeight = FontWeight.Black, fontSize = 14.sp)
-                    }
-
-                    Button(
-                        onClick = {
-                            kicks.add(Pair(currentIsHome, false))
-                            currentIsHome = !currentIsHome
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("FALLADO", fontWeight = FontWeight.Black, fontSize = 14.sp)
-                    }
-                }
-
-                if (kicks.isNotEmpty()) {
-                    OutlinedButton(
-                        onClick = {
-                            val last = kicks.removeLastOrNull()
-                            if (last != null) {
-                                currentIsHome = last.first
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("Deshacer último tiro (${kicks.size} registrados)")
-                    }
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Registra la definición por penales:")
+                OutlinedTextField(
+                    value = homeStr,
+                    onValueChange = { homeStr = it },
+                    label = { Text("Penales ${homeTeam?.name ?: "Local"}") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = awayStr,
+                    onValueChange = { awayStr = it },
+                    label = { Text("Penales ${awayTeam?.name ?: "Visitante"}") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    onConfirm(homeGoals, awayGoals)
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                shape = RoundedCornerShape(10.dp)
+                    val h = homeStr.toIntOrNull() ?: 0
+                    val a = awayStr.toIntOrNull() ?: 0
+                    onConfirm(h, a)
+                }
             ) {
-                Text("Confirmar Tanda ($homeGoals - $awayGoals)")
+                Text("Guardar Penales")
             }
         },
         dismissButton = {
-            OutlinedButton(
-                onClick = onDismiss,
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("Cerrar")
-            }
+            OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
         }
     )
 }
 
-// Dialog: MVP Selection
 @Composable
 fun MvpSelectionDialog(
     homeTeam: Team,
@@ -1984,12 +1828,11 @@ fun MvpSelectionDialog(
 ) {
     var selectedTeamId by remember { mutableLongStateOf(homeTeam.id) }
     var selectedPlayerId by remember { mutableStateOf<Long?>(null) }
-
     val currentRoster = if (selectedTeamId == homeTeam.id) homePlayers else awayPlayers
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Eleccion de Jugador MVP") },
+        title = { Text("Elegir Jugador MVP", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier
@@ -1997,7 +1840,6 @@ fun MvpSelectionDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Selecciona el equipo del jugador mas valioso del encuentro:")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { selectedTeamId = homeTeam.id; selectedPlayerId = null },
@@ -2019,29 +1861,24 @@ fun MvpSelectionDialog(
                     }
                 }
 
-                Text("Jugador MVP:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text("Selecciona el MVP del partido:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                        .padding(8.dp)
+                        .padding(4.dp)
                 ) {
-                    currentRoster.forEach { player ->
+                    currentRoster.forEach { p ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { selectedPlayerId = player.id },
+                                .clickable { selectedPlayerId = p.id }
+                                .padding(4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(
-                                selected = selectedPlayerId == player.id,
-                                onClick = { selectedPlayerId = player.id }
-                            )
-                            val label = buildString {
-                                append("#${player.number} ${player.name}")
-                                if (player.isCaptain) append(" (C)")
-                            }
-                            Text(label, fontSize = 12.sp, fontWeight = if (player.isCaptain) FontWeight.Bold else FontWeight.Normal)
+                            RadioButton(selected = selectedPlayerId == p.id, onClick = { selectedPlayerId = p.id })
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("#${pDorsal(p.dorsal)} ${p.name}", fontSize = 13.sp)
                         }
                     }
                 }
@@ -2049,12 +1886,10 @@ fun MvpSelectionDialog(
         },
         confirmButton = {
             Button(
-                onClick = {
-                    selectedPlayerId?.let { onConfirm(selectedTeamId, it) }
-                },
+                onClick = { onConfirm(selectedTeamId, selectedPlayerId!!) },
                 enabled = selectedPlayerId != null
             ) {
-                Text("Premiar MVP")
+                Text("Designar MVP")
             }
         },
         dismissButton = {
@@ -2063,82 +1898,6 @@ fun MvpSelectionDialog(
     )
 }
 
-@Composable
-private fun ActionIconButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    tint: Color,
-    onClick: () -> Unit,
-    testTag: String
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 2.dp)
-            .testTag(testTag)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .background(tint.copy(alpha = 0.15f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = tint,
-                modifier = Modifier.size(22.dp)
-            )
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-@Composable
-private fun ActionCardIconButton(
-    label: String,
-    onClick: () -> Unit,
-    testTag: String
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 2.dp)
-            .testTag(testTag)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .background(Color(0xFFF59E0B).copy(alpha = 0.15f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                Box(
-                    modifier = Modifier
-                        .size(7.dp, 13.dp)
-                        .background(Color(0xFFF59E0B), RoundedCornerShape(1.dp))
-                )
-                Box(
-                    modifier = Modifier
-                        .size(7.dp, 13.dp)
-                        .background(Color(0xFFEF4444), RoundedCornerShape(1.dp))
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
+private fun pDorsal(dorsal: Int): String {
+    return if (dorsal > 0) dorsal.toString() else "-"
 }

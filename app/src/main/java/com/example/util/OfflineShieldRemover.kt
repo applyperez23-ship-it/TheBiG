@@ -48,7 +48,6 @@ object OfflineShieldRemover {
             ).toFloat()
 
             if (dist <= threshold) {
-                // Set pixel transparent
                 pixels[i] = Color.TRANSPARENT
             }
         }
@@ -59,8 +58,6 @@ object OfflineShieldRemover {
 
     /**
      * Applies manual erase or paint on the mutable bitmap at coordinates (x, y) with radius.
-     * isErase = true: clears pixels to transparent
-     * isErase = false: draws with paintColor
      */
     fun applyBrush(
         bitmap: Bitmap,
@@ -80,6 +77,44 @@ object OfflineShieldRemover {
             }
         }
         canvas.drawCircle(x, y, radius, paint)
+    }
+
+    /**
+     * Interpolates brush between previous and current touch points to produce
+     * fluid continuous lines without gaps during fast drag motions.
+     */
+    fun applyBrushLine(
+        bitmap: Bitmap,
+        startX: Float,
+        startY: Float,
+        endX: Float,
+        endY: Float,
+        radius: Float,
+        isErase: Boolean,
+        paintColor: Int = Color.WHITE
+    ) {
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            strokeWidth = radius * 2f
+            strokeCap = Paint.Cap.ROUND
+            if (isErase) {
+                xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+            } else {
+                color = paintColor
+                style = Paint.Style.STROKE
+            }
+        }
+        canvas.drawLine(startX, startY, endX, endY, paint)
+        // Also draw end circle
+        val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            if (isErase) {
+                xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+            } else {
+                color = paintColor
+                style = Paint.Style.FILL
+            }
+        }
+        canvas.drawCircle(endX, endY, radius, circlePaint)
     }
 
     /**

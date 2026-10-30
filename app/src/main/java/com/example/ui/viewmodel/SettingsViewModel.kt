@@ -9,12 +9,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class RemoteBroadcastNotice(
     val title: String,
     val message: String,
     val isSurvey: Boolean = false,
     val options: List<String> = emptyList(),
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class UserFeedbackReport(
+    val id: Long = System.currentTimeMillis(),
+    val type: String, // "SUGGESTION" or "BUG"
+    val subject: String,
+    val description: String,
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -49,6 +59,10 @@ class SettingsViewModel(
     private val _backupStatus = MutableStateFlow<String?>(null)
     val backupStatus: StateFlow<String?> = _backupStatus.asStateFlow()
 
+    // Internal Feedback Reports
+    private val _feedbackReports = MutableStateFlow<List<UserFeedbackReport>>(loadFeedbacks())
+    val feedbackReports: StateFlow<List<UserFeedbackReport>> = _feedbackReports.asStateFlow()
+
     fun acceptOnboarding() {
         prefs.edit().putBoolean("onboarding_accepted", true).apply()
         _onboardingShown.value = true
@@ -78,6 +92,18 @@ class SettingsViewModel(
         _activeBroadcast.value = null
     }
 
+    fun submitFeedback(type: String, subject: String, description: String) {
+        val newReport = UserFeedbackReport(
+            type = type,
+            subject = subject.trim(),
+            description = description.trim()
+        )
+        val current = _feedbackReports.value.toMutableList()
+        current.add(0, newReport)
+        _feedbackReports.value = current
+        saveFeedbacks(current)
+    }
+
     fun exportBackup(onReady: (String) -> Unit) {
         viewModelScope.launch {
             try {
@@ -105,6 +131,48 @@ class SettingsViewModel(
 
     fun clearBackupStatus() {
         _backupStatus.value = null
+    }
+
+    private fun loadFeedbacks(): List<UserFeedbackReport> {
+        val raw = prefs.getString("user_feedbacks", null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            val list = mutableListOf<UserFeedbackReport>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(
+                    UserFeedbackReport(
+                        id = obj.optLong("id", System.currentTimeMillis()),
+                        type = obj.getString("type"),
+                        subject = obj.getString("subject"),
+                        description = obj.getString("description"),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                    )
+                )
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveFeedbacks(reports: List<UserFeedbackReport>) {
+        try {
+            val arr = JSONArray()
+            for (r in reports) {
+                val obj = JSONObject().apply {
+                    put("id", r.id)
+                    put("type", r.type)
+                    put("subject", r.subject)
+                    put("description", r.description)
+                    put("timestamp", r.timestamp)
+                }
+                arr.put(obj)
+            }
+            prefs.edit().putString("user_feedbacks", arr.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
 

@@ -57,17 +57,55 @@ object TeamCrestHelper {
 
     fun copyShieldUriToInternal(context: Context, uri: Uri): String? {
         return try {
+            // Attempt to take persistable read permission if granted
+            try {
+                val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+            } catch (_: Exception) {
+                // Not all URIs support persistable permissions (e.g. tree/document vs content)
+            }
+
             val dir = File(context.filesDir, "team_shields").apply { if (!exists()) mkdirs() }
             val destFile = File(dir, "shield_${System.currentTimeMillis()}.png")
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(destFile).use { output ->
-                    input.copyTo(output)
-                }
+
+            // Decode sampled bitmap safely to prevent OOM
+            val options = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream, null, options)
             }
-            Uri.fromFile(destFile).toString()
+
+            var inSampleSize = 1
+            val maxDim = 512
+            while (options.outWidth / inSampleSize > maxDim || options.outHeight / inSampleSize > maxDim) {
+                inSampleSize *= 2
+            }
+
+            val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+                this.inSampleSize = inSampleSize
+            }
+
+            val bitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
+                android.graphics.BitmapFactory.decodeStream(stream, null, decodeOptions)
+            }
+
+            if (bitmap != null) {
+                FileOutputStream(destFile).use { out ->
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 95, out)
+                }
+                bitmap.recycle()
+                Uri.fromFile(destFile).toString()
+            } else {
+                // Direct stream copy fallback
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(destFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                Uri.fromFile(destFile).toString()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
-            uri.toString()
+            try { uri.toString() } catch (_: Exception) { null }
         }
     }
 

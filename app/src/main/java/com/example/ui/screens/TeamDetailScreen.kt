@@ -110,8 +110,6 @@ fun TeamDetailScreen(
         return
     }
 
-    val paidCount = players.count { it.feePaid }
-    val pendingCount = players.size - paidCount
 
     Scaffold(
         topBar = {
@@ -263,7 +261,6 @@ fun TeamDetailScreen(
                         PlayerRowCard(
                             player = player,
                             team = team,
-                            onToggleFee = { viewModel.togglePlayerFee(player.id, player.feePaid) },
                             onToggleCaptain = { viewModel.toggleCaptain(team.id, player.id, player.isCaptain) },
                             onDelete = { playerToDelete = player }
                         )
@@ -331,7 +328,6 @@ fun TeamDetailScreen(
 private fun PlayerRowCard(
     player: Player,
     team: Team,
-    onToggleFee: () -> Unit,
     onToggleCaptain: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -403,10 +399,9 @@ private fun PlayerRowCard(
                     }
                 }
                 Text(
-                    text = if (player.feePaid) "Cuota Pagada" else "Cuota Pendiente",
+                    text = "Dorsal #${player.dorsal} • ${if (player.isGoalkeeper) "Portero" else "Jugador de Campo"}",
                     fontSize = 11.sp,
-                    color = if (player.feePaid) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
-                    fontWeight = FontWeight.SemiBold
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -421,11 +416,6 @@ private fun PlayerRowCard(
                     modifier = Modifier.size(20.dp)
                 )
             }
-
-            Checkbox(
-                checked = player.feePaid,
-                onCheckedChange = { onToggleFee() }
-            )
 
             IconButton(onClick = onDelete) {
                 Icon(

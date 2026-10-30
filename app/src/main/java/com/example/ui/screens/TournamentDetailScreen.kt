@@ -22,12 +22,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
@@ -43,6 +45,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -51,9 +55,12 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,14 +77,20 @@ import com.example.data.local.entity.Match
 import com.example.data.local.entity.MatchEvent
 import com.example.data.local.entity.Player
 import com.example.data.local.entity.Team
+import com.example.data.local.entity.TournamentModes
 import com.example.data.local.entity.TournamentTeamCrossRef
 import com.example.domain.rules.PrizeCalculator
+import com.example.domain.rules.PrizeCategory
 import com.example.domain.rules.StandingsCalculator
 import com.example.domain.rules.StatsCalculator
 import com.example.domain.rules.TeamStanding
+import com.example.domain.rules.TournamentScheduler
+import com.example.ui.components.BracketDiagramView
 import com.example.ui.viewmodel.TournamentViewModel
 import com.example.util.GraphicCardGenerator
 import com.example.util.TeamCrestView
+import com.example.util.TheBiGBackupHelper
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,6 +116,7 @@ fun TournamentDetailScreen(
 
     var showEnrollDialog by remember { mutableStateOf(false) }
     var showChampionDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     val app = TheBiGApp.instance
     LaunchedEffect(tournamentId) {
@@ -156,13 +170,14 @@ fun TournamentDetailScreen(
             TopAppBar(
                 title = {
                     Column {
+                        // Tournament title without "Edición X"
                         Text(
                             text = tournament.name,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Edición ${tournament.edition} • ${enrolledTeams.size} Equipos",
+                            text = "${enrolledTeams.size} Equipos • ${formatModeName(tournament.tournamentType)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -174,6 +189,21 @@ fun TournamentDetailScreen(
                     }
                 },
                 actions = {
+                    // Export .tb file
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                val uri = TheBiGBackupHelper.exportTournamentTbFile(context, app.repository, tournamentId)
+                                if (uri != null) {
+                                    TheBiGBackupHelper.shareTbFile(context, uri, tournament.name)
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = "Compartir .tb")
+                    }
+
+                    // Champion & Trophy action
                     IconButton(
                         onClick = {
                             if (tournament.championTeamId != null) {
@@ -192,7 +222,7 @@ fun TournamentDetailScreen(
                         Icon(
                             Icons.Default.EmojiEvents,
                             contentDescription = "Campeón y Foto",
-                            tint = if (tournament.championTeamId != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                            tint = if (tournament.championTeamId != null) Color(0xFFF59E0B) else MaterialTheme.colorScheme.outline
                         )
                     }
                 },
@@ -236,38 +266,70 @@ fun TournamentDetailScreen(
 
             when (selectedSubTab) {
                 0 -> StandingsTabContent(
+                    tournament = tournament,
                     standings = standings,
-                    onExportInstagram = {
+                    matches = matches,
+                    enrolledTeams = enrolledTeams,
+                    onMatchClick = onMatchClick,
+                    onExportTable = {
                         val bmp = GraphicCardGenerator.generateStandingsInstagramBitmap(tournament, standings)
-                        GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Tabla 1:1")
+                        GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Tabla")
                     },
                     onOpenEnroll = { showEnrollDialog = true }
                 )
                 1 -> FixtureTabContent(
+                    tournament = tournament,
                     matches = matches,
                     enrolledTeams = enrolledTeams,
-                    onGenerate = { viewModel.generateFixture(tournamentId) },
+                    onGenerate = {
+                        scope.launch {
+                            val newMatches = TournamentScheduler.generateSchedule(
+                                tournamentId = tournamentId,
+                                tournamentType = tournament.tournamentType,
+                                teams = enrolledTeams,
+                                homeAndAway = false
+                            )
+                            for (m in newMatches) {
+                                app.repository.saveMatch(m)
+                            }
+                        }
+                    },
                     onMatchClick = onMatchClick,
-                    onExportInstagram = {
+                    onExportFixture = {
                         val teamMap = enrolledTeams.associateBy { it.id }
                         val bmp = GraphicCardGenerator.generateFixtureInstagramBitmap(tournament, matches, teamMap)
-                        GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Fixture 1:1")
+                        GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Fixture")
                     }
                 )
                 2 -> StatisticsTabContent(
                     topScorers = topScorers,
                     topAssisters = topAssisters,
                     goalkeepers = goalkeeperRankings,
-                    onExportInstagramScorers = {
+                    onExportScorers = {
                         val bmp = GraphicCardGenerator.generateScorersInstagramBitmap(tournament, topScorers)
-                        GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Goleadores 1:1")
+                        GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Goleadores")
                     }
                 )
-                3 -> FinancialTabContent(
-                    summary = financialSummary,
+                3 -> IsolatedFinancesTabContent(
+                    tournament = tournament,
+                    enrolledTeams = enrolledTeams,
+                    players = players,
                     crossRefs = crossRefs,
-                    teams = enrolledTeams,
-                    onToggleFee = { tId, curr -> viewModel.updateTeamFeeStatus(tournamentId, tId, !curr) }
+                    onTogglePlayerFee = { playerId, current ->
+                        scope.launch {
+                            app.repository.updatePlayerFeeStatus(playerId, !current)
+                        }
+                    },
+                    onUpdatePrizes = { ch, ru, sc, gk ->
+                        viewModel.updateTournament(
+                            tournament.copy(
+                                prizeChampionAmount = ch,
+                                prizeRunnerUpAmount = ru,
+                                prizeTopScorerAmount = sc,
+                                prizeBestGkAmount = gk
+                            )
+                        )
+                    }
                 )
             }
         }
@@ -301,14 +363,18 @@ fun TournamentDetailScreen(
 
 @Composable
 private fun StandingsTabContent(
+    tournament: com.example.data.local.entity.Tournament,
     standings: List<TeamStanding>,
-    onExportInstagram: () -> Unit,
+    matches: List<Match>,
+    enrolledTeams: List<Team>,
+    onMatchClick: (Long) -> Unit,
+    onExportTable: () -> Unit,
     onOpenEnroll: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(
@@ -317,10 +383,10 @@ private fun StandingsTabContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Button(
-                onClick = onExportInstagram,
+                onClick = onExportTable,
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                modifier = Modifier.testTag("export_standings_instagram_button")
+                modifier = Modifier.testTag("export_standings_button")
             ) {
                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
@@ -335,6 +401,12 @@ private fun StandingsTabContent(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Inscribir Clubes", fontSize = 12.sp)
             }
+        }
+
+        // Bracket view if tournament has knockout stages
+        if (tournament.tournamentType == TournamentModes.CUP || tournament.tournamentType == TournamentModes.GROUPS_CUP) {
+            BracketDiagramView(matches = matches, teams = enrolledTeams, onMatchClick = onMatchClick)
+            Spacer(modifier = Modifier.height(4.dp))
         }
 
         if (standings.isEmpty()) {
@@ -352,24 +424,37 @@ private fun StandingsTabContent(
                 )
             }
         } else {
+            // Perfectly aligned Standings Table Header: PJ, PG, PE, PP, GF, GC, DG, PTS
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                        .padding(horizontal = 8.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("#  Equipo", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("PJ", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        Text("PG", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        Text("DG", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        Text("PTS", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text = "#  Club",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TableHeaderCell("PJ")
+                        TableHeaderCell("PG")
+                        TableHeaderCell("PE")
+                        TableHeaderCell("PP")
+                        TableHeaderCell("GF")
+                        TableHeaderCell("GC")
+                        TableHeaderCell("DG")
+                        TableHeaderCell("PTS", isHighlight = true)
                     }
                 }
             }
@@ -387,31 +472,31 @@ private fun StandingsTabContent(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("${s.position}.", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                TeamCrestView(
-                                    shieldIndex = s.team.shieldVectorIndex,
-                                    primaryColorHex = s.team.primaryColorHex,
-                                    secondaryColorHex = s.team.secondaryColorHex,
-                                    borderColorHex = s.team.borderColorHex,
-                                    shortName = s.team.shortName,
-                                    customShieldUri = s.team.customShieldUri,
-                                    size = 28.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(s.team.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("${s.position}.", fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.width(20.dp))
+                                TeamCrestView(team = s.team, size = 24.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(s.team.name, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
                             }
 
-                            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                Text("${s.pj}", fontSize = 12.sp)
-                                Text("${s.pg}", fontSize = 12.sp)
-                                Text("${s.dg}", fontSize = 12.sp)
-                                Text("${s.pts}", fontWeight = FontWeight.Black, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TableDataCell("${s.pj}")
+                                TableDataCell("${s.pg}")
+                                TableDataCell("${s.pe}")
+                                TableDataCell("${s.pp}")
+                                TableDataCell("${s.gf}")
+                                TableDataCell("${s.gc}")
+                                TableDataCell("${s.dg}")
+                                TableDataCell("${s.pts}", isHighlight = true)
                             }
                         }
                     }
@@ -422,19 +507,44 @@ private fun StandingsTabContent(
 }
 
 @Composable
+private fun TableHeaderCell(text: String, isHighlight: Boolean = false) {
+    Text(
+        text = text,
+        fontWeight = FontWeight.Bold,
+        fontSize = 11.sp,
+        textAlign = TextAlign.Center,
+        color = if (isHighlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.width(24.dp)
+    )
+}
+
+@Composable
+private fun TableDataCell(text: String, isHighlight: Boolean = false) {
+    Text(
+        text = text,
+        fontSize = 11.sp,
+        fontWeight = if (isHighlight) FontWeight.Black else FontWeight.Normal,
+        textAlign = TextAlign.Center,
+        color = if (isHighlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.width(24.dp)
+    )
+}
+
+@Composable
 private fun FixtureTabContent(
+    tournament: com.example.data.local.entity.Tournament,
     matches: List<Match>,
     enrolledTeams: List<Team>,
     onGenerate: () -> Unit,
     onMatchClick: (Long) -> Unit,
-    onExportInstagram: () -> Unit
+    onExportFixture: () -> Unit
 ) {
     val teamMap = remember(enrolledTeams) { enrolledTeams.associateBy { it.id } }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(
@@ -443,7 +553,7 @@ private fun FixtureTabContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Button(
-                onClick = onExportInstagram,
+                onClick = onExportFixture,
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 enabled = matches.isNotEmpty()
@@ -456,9 +566,12 @@ private fun FixtureTabContent(
             if (matches.isEmpty() && enrolledTeams.size >= 2) {
                 Button(
                     onClick = onGenerate,
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
                 ) {
-                    Text("Generar Partidos", fontSize = 12.sp)
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Generar Calendario", fontSize = 12.sp)
                 }
             }
         }
@@ -471,7 +584,8 @@ private fun FixtureTabContent(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Aún no se han generado los partidos. Inscribe equipos y toca 'Generar Partidos'.",
+                    text = if (enrolledTeams.size < 2) "Inscribe al menos 2 equipos para generar el fixture."
+                    else "Presiona 'Generar Calendario' para calcular los partidos según el modo ${formatModeName(tournament.tournamentType)}.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -482,33 +596,70 @@ private fun FixtureTabContent(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(matches, key = { it.id }) { m ->
-                    val home = teamMap[m.homeTeamId]
-                    val away = teamMap[m.awayTeamId]
+                items(matches, key = { it.id }) { match ->
+                    val homeTeam = teamMap[match.homeTeamId]
+                    val awayTeam = teamMap[match.awayTeamId]
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onMatchClick(m.id) },
+                            .clickable { onMatchClick(match.id) },
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (match.status == "LIVE") MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        )
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column {
-                                Text(m.roundName.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                Text("${home?.name ?: "Local"} vs ${away?.name ?: "Visitante"}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(match.roundName, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TeamCrestView(team = homeTeam, size = 24.dp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(homeTeam?.name ?: "Local", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TeamCrestView(team = awayTeam, size = 24.dp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(awayTeam?.name ?: "Visitante", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
                             }
-                            Text(
-                                text = if (m.status == "FINISHED") "${m.homeScore} - ${m.awayScore}" else "JUGAR",
-                                fontWeight = FontWeight.Black,
-                                fontSize = 15.sp,
-                                color = if (m.status == "FINISHED") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-                            )
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                if (match.status == "FINISHED" || match.status == "LIVE") {
+                                    Text("${match.homeScore} - ${match.awayScore}", fontWeight = FontWeight.Black, fontSize = 18.sp)
+                                } else {
+                                    Text("VS", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.outline)
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = when (match.status) {
+                                        "LIVE" -> Color(0xFF10B981)
+                                        "FINISHED" -> MaterialTheme.colorScheme.outlineVariant
+                                        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                    },
+                                    modifier = Modifier.padding(top = 4.dp)
+                                ) {
+                                    Text(
+                                        text = when (match.status) {
+                                            "LIVE" -> "EN VIVO"
+                                            "FINISHED" -> "FINAL"
+                                            else -> "PROGRAMADO"
+                                        },
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (match.status == "LIVE") Color.White else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -522,13 +673,13 @@ private fun StatisticsTabContent(
     topScorers: List<com.example.domain.rules.ScorerStat>,
     topAssisters: List<com.example.domain.rules.AssisterStat>,
     goalkeepers: List<com.example.domain.rules.GoalkeeperStat>,
-    onExportInstagramScorers: () -> Unit
+    onExportScorers: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState())
+            .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Row(
@@ -536,61 +687,286 @@ private fun StatisticsTabContent(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Tabla de Goleadores", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+            Text("Líderes y Distinciones", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Button(
-                onClick = onExportInstagramScorers,
-                shape = RoundedCornerShape(8.dp),
-                enabled = topScorers.isNotEmpty()
+                onClick = onExportScorers,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Compartir Goleadores", fontSize = 11.sp)
+                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Compartir Goleadores", fontSize = 12.sp)
             }
         }
 
-        if (topScorers.isEmpty()) {
-            Text("No se han registrado goles aún.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            topScorers.take(5).forEachIndexed { idx, sc ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("${idx + 1}. ${sc.player.name} (${sc.team.name})", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Text("${sc.goals} Goles", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        // Top Scorers
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Máximos Goleadores (Pichichi)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+
+                if (topScorers.isEmpty()) {
+                    Text("Sin goles registrados", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    topScorers.take(5).forEachIndexed { index, s ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("${index + 1}. ${s.player.name} (${s.team.shortName})", fontSize = 12.sp)
+                            Text("${s.goals} goles", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-        Text("Máximos Asistidores", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-        if (topAssisters.isEmpty()) {
-            Text("No se han registrado asistencias aún.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Top Assisters
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Máximos Asistidores", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+
+                if (topAssisters.isEmpty()) {
+                    Text("Sin asistencias registradas", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    topAssisters.take(5).forEachIndexed { index, a ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("${index + 1}. ${a.player.name} (${a.team.shortName})", fontSize = 12.sp)
+                            Text("${a.assists} asistencias", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Top Goalkeepers (Valla Menos Vencida)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Shield, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Valla Menos Vencida (Porteros)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+
+                if (goalkeepers.isEmpty()) {
+                    Text("Sin estadísticas de portería", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    goalkeepers.take(5).forEachIndexed { index, gk ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("${index + 1}. ${gk.player.name} (${gk.team.shortName})", fontSize = 12.sp)
+                            Text("${gk.goalsConceded} goles (${gk.matchesPlayed} PJ)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF10B981))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Isolated Finances Tab with auto-balancing 100% prizes and player fee checklist.
+ */
+@Composable
+private fun IsolatedFinancesTabContent(
+    tournament: com.example.data.local.entity.Tournament,
+    enrolledTeams: List<Team>,
+    players: List<Player>,
+    crossRefs: List<TournamentTeamCrossRef>,
+    onTogglePlayerFee: (playerId: Long, current: Boolean) -> Unit,
+    onUpdatePrizes: (champion: Double, runnerUp: Double, scorer: Double, bestGk: Double) -> Unit
+) {
+    val totalTeams = enrolledTeams.size
+    val totalCollected = tournament.entryFee * totalTeams
+
+    // Sliders for dynamic 100% rebalancing
+    var percentages by remember(tournament) {
+        val total = (tournament.prizeChampionAmount + tournament.prizeRunnerUpAmount + tournament.prizeTopScorerAmount + tournament.prizeBestGkAmount).coerceAtLeast(1.0)
+        mutableStateOf<Map<PrizeCategory, Float>>(
+            mapOf(
+                PrizeCategory.CHAMPION to ((tournament.prizeChampionAmount / total) * 100f).toFloat(),
+                PrizeCategory.RUNNER_UP to ((tournament.prizeRunnerUpAmount / total) * 100f).toFloat(),
+                PrizeCategory.TOP_SCORER to ((tournament.prizeTopScorerAmount / total) * 100f).toFloat(),
+                PrizeCategory.BEST_GK to ((tournament.prizeBestGkAmount / total) * 100f).toFloat()
+            )
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // Pool Summary Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFF59E0B).copy(alpha = 0.15f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("POZO TOTAL DE PREMIOS", color = Color(0xFFF59E0B), fontWeight = FontWeight.Black, fontSize = 11.sp)
+                    Text("$totalTeams Clubes × $${tournament.entryFee.toInt()}", fontSize = 12.sp)
+                }
+                Text("$${"%.2f".format(totalCollected)}", fontWeight = FontWeight.Black, fontSize = 22.sp, color = Color(0xFFF59E0B))
+            }
+        }
+
+        // Proportional Auto-balancing Sliders (Sum = 100%)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+        ) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Reparto Proporcional de Premios (Total 100%):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+
+                // Champion Slider
+                PrizeSliderRow(
+                    label = "Campeón",
+                    percentage = percentages[PrizeCategory.CHAMPION] ?: 50f,
+                    amount = totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 50f).toDouble() / 100.0),
+                    color = Color(0xFF10B981),
+                    onValueChange = { newVal ->
+                        percentages = PrizeCalculator.rebalancePercentages(PrizeCategory.CHAMPION, newVal, percentages)
+                        val ch = totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 0f).toDouble() / 100.0)
+                        val ru = totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 0f).toDouble() / 100.0)
+                        val sc = totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 0f).toDouble() / 100.0)
+                        val gk = totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 0f).toDouble() / 100.0)
+                        onUpdatePrizes(ch, ru, sc, gk)
+                    }
+                )
+
+                // Runner Up Slider
+                PrizeSliderRow(
+                    label = "Subcampeón",
+                    percentage = percentages[PrizeCategory.RUNNER_UP] ?: 25f,
+                    amount = totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 25f).toDouble() / 100.0),
+                    color = Color(0xFF3B82F6),
+                    onValueChange = { newVal ->
+                        percentages = PrizeCalculator.rebalancePercentages(PrizeCategory.RUNNER_UP, newVal, percentages)
+                        val ch = totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 0f).toDouble() / 100.0)
+                        val ru = totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 0f).toDouble() / 100.0)
+                        val sc = totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 0f).toDouble() / 100.0)
+                        val gk = totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 0f).toDouble() / 100.0)
+                        onUpdatePrizes(ch, ru, sc, gk)
+                    }
+                )
+
+                // Top Scorer Slider
+                PrizeSliderRow(
+                    label = "Goleador",
+                    percentage = percentages[PrizeCategory.TOP_SCORER] ?: 15f,
+                    amount = totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 15f).toDouble() / 100.0),
+                    color = Color(0xFFEC4899),
+                    onValueChange = { newVal ->
+                        percentages = PrizeCalculator.rebalancePercentages(PrizeCategory.TOP_SCORER, newVal, percentages)
+                        val ch = totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 0f).toDouble() / 100.0)
+                        val ru = totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 0f).toDouble() / 100.0)
+                        val sc = totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 0f).toDouble() / 100.0)
+                        val gk = totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 0f).toDouble() / 100.0)
+                        onUpdatePrizes(ch, ru, sc, gk)
+                    }
+                )
+
+                // Best GK Slider
+                PrizeSliderRow(
+                    label = "Valla Menos Vencida",
+                    percentage = percentages[PrizeCategory.BEST_GK] ?: 10f,
+                    amount = totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 10f).toDouble() / 100.0),
+                    color = Color(0xFFF59E0B),
+                    onValueChange = { newVal ->
+                        percentages = PrizeCalculator.rebalancePercentages(PrizeCategory.BEST_GK, newVal, percentages)
+                        val ch = totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 0f).toDouble() / 100.0)
+                        val ru = totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 0f).toDouble() / 100.0)
+                        val sc = totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 0f).toDouble() / 100.0)
+                        val gk = totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 0f).toDouble() / 100.0)
+                        onUpdatePrizes(ch, ru, sc, gk)
+                    }
+                )
+            }
+        }
+
+        // Player Fee Checklist
+        Text("Control de Cuotas por Jugador:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+
+        if (enrolledTeams.isEmpty()) {
+            Text("No hay clubes inscritos en el torneo.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            topAssisters.take(5).forEachIndexed { idx, ast ->
+            enrolledTeams.forEach { team ->
+                val teamPlayers = players.filter { it.teamId == team.id }
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("${idx + 1}. ${ast.player.name} (${ast.team.name})", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Text("${ast.assists} Asist.", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TeamCrestView(team = team, size = 26.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(team.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+
+                        if (teamPlayers.isEmpty()) {
+                            Text("Sin jugadores en la plantilla", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            teamPlayers.forEach { p ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onTogglePlayerFee(p.id, p.feePaid) }
+                                        .padding(vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("#${p.dorsal} ${p.name}", fontSize = 12.sp)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = if (p.feePaid) "Pagado" else "Pendiente",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (p.feePaid) Color(0xFF10B981) else MaterialTheme.colorScheme.error
+                                        )
+                                        Checkbox(checked = p.feePaid, onCheckedChange = { onTogglePlayerFee(p.id, p.feePaid) })
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -599,116 +975,37 @@ private fun StatisticsTabContent(
 }
 
 @Composable
-private fun FinancialTabContent(
-    summary: com.example.domain.rules.TournamentFinancialSummary,
-    crossRefs: List<TournamentTeamCrossRef>,
-    teams: List<Team>,
-    onToggleFee: (teamId: Long, current: Boolean) -> Unit
+private fun PrizeSliderRow(
+    label: String,
+    percentage: Float,
+    amount: Double,
+    color: Color,
+    onValueChange: (Float) -> Unit
 ) {
-    val teamMap = remember(teams) { teams.associateBy { it.id } }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Card(
+    Column {
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Calculadora Financiera Inteligente", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Fondo Total Estimado:", style = MaterialTheme.typography.bodyMedium)
-                    Text("$${summary.estimatedRevenue.toInt()}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Plantilla Oficial Inscrita:", style = MaterialTheme.typography.bodyMedium)
-                    Text("${summary.totalRosterPlayers} jugadores (${summary.enrolledTeamsCount} clubes)", fontWeight = FontWeight.SemiBold)
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Cuota Promedio por Jugador:", style = MaterialTheme.typography.bodyMedium)
-                    Text("$${summary.averageFeePerPlayer.toInt()}/jugador", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.secondary)
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Recaudado Real:", style = MaterialTheme.typography.bodyMedium)
-                    Text("$${summary.actualRevenue.toInt()}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Pozo de Sanciones (Amarillas + Rojas):", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                    Text("$${summary.totalSanctionsPool.toInt()}", fontWeight = FontWeight.Black, color = Color(0xFFF59E0B))
-                }
-                Text(
-                    text = "El pozo acumulativo por sanciones financia automáticamente el Premio Económico al MVP del torneo.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text("$label: ${percentage.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text("$${"%.2f".format(amount)}", color = color, fontWeight = FontWeight.Bold, fontSize = 12.sp)
         }
+        Slider(
+            value = percentage,
+            onValueChange = onValueChange,
+            valueRange = 0f..100f
+        )
+    }
+}
 
-        Text("Premios Asignados", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-        summary.prizes.forEach { p ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(p.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text(p.winnerNote, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text("$${p.amount.toInt()}", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-        Text("Control de Cuotas por Club (Cálculo Automático por Plantilla)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-        crossRefs.forEach { cr ->
-            val tm = teamMap[cr.teamId] ?: return@forEach
-            val quotaInfo = summary.teamQuotas[cr.teamId]
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(tm.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        val rCount = quotaInfo?.rosterCount ?: 0
-                        val perPl = quotaInfo?.feePerPlayer?.toInt() ?: 0
-                        Text(
-                            text = if (rCount > 0) "$rCount jugadores en plantilla • $$perPl/jugador" else "Sin jugadores en plantilla",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (cr.feePaid) "Pagado" else "Pendiente", fontSize = 12.sp, color = if (cr.feePaid) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Checkbox(checked = cr.feePaid, onCheckedChange = { onToggleFee(tm.id, cr.feePaid) })
-                    }
-                }
-            }
-        }
+private fun formatModeName(mode: String): String {
+    return when (mode) {
+        TournamentModes.LEAGUE -> "Liga Tradicional"
+        TournamentModes.CUP -> "Copa (Eliminatoria)"
+        TournamentModes.GROUPS_CUP -> "Grupos + Copa"
+        TournamentModes.MIXED -> "Modo Mixto"
+        else -> mode
     }
 }
 
@@ -722,55 +1019,65 @@ private fun EnrollTeamsDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Inscribir Equipos al Torneo", fontWeight = FontWeight.Bold) },
+        title = { Text("Gestionar Clubes Participantes", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Equipos Disponibles:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-                if (availableTeams.isEmpty()) {
-                    Text("No hay equipos adicionales disponibles.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Inscritos (${enrolledTeams.size}):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                if (enrolledTeams.isEmpty()) {
+                    Text("No hay equipos inscritos.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
-                    availableTeams.forEach { tm ->
+                    enrolledTeams.forEach { t ->
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onEnroll(tm.id) }
-                                .padding(vertical = 4.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(tm.name, fontSize = 13.sp)
-                            Button(onClick = { onEnroll(tm.id) }, shape = RoundedCornerShape(6.dp)) {
-                                Text("Inscribir", fontSize = 11.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TeamCrestView(team = t, size = 24.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(t.name, fontSize = 13.sp)
+                            }
+                            IconButton(onClick = { onRemove(t.id) }) {
+                                Icon(Icons.Default.Close, contentDescription = "Remover", tint = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
-                Text("Equipos Inscritos (${enrolledTeams.size}):", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-                enrolledTeams.forEach { tm ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(tm.name, fontSize = 13.sp)
-                        IconButton(onClick = { onRemove(tm.id) }) {
-                            Icon(Icons.Default.Close, contentDescription = "Desinscribir", tint = MaterialTheme.colorScheme.error)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Disponibles para inscribir:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                if (availableTeams.isEmpty()) {
+                    Text("Todos los clubes creados ya están inscritos.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    availableTeams.forEach { t ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TeamCrestView(team = t, size = 24.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(t.name, fontSize = 13.sp)
+                            }
+                            Button(
+                                onClick = { onEnroll(t.id) },
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Inscribir", fontSize = 11.sp)
+                            }
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            Button(onClick = onDismiss) { Text("Cerrar") }
+            Button(onClick = onDismiss) { Text("Listo") }
         }
     )
 }
@@ -782,34 +1089,57 @@ private fun ChampionSelectDialog(
     onDismiss: () -> Unit,
     onSelect: (champId: Long, runnerUpId: Long?) -> Unit
 ) {
-    var selectedChampId by remember { mutableStateOf<Long?>(currentChampId ?: teams.firstOrNull()?.id) }
+    var selectedChampId by remember { mutableStateOf(currentChampId) }
     var selectedRunnerUpId by remember { mutableStateOf<Long?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Proclamar Equipo Campeón", fontWeight = FontWeight.Bold) },
+        title = { Text("Asignar Campeón Oficial", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("Selecciona el equipo Campeón:", fontWeight = FontWeight.SemiBold)
-                teams.forEach { tm ->
+                Text("Selecciona el equipo Campeón del torneo:")
+                teams.forEach { team ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { selectedChampId = tm.id }
+                            .clickable { selectedChampId = team.id }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         androidx.compose.material3.RadioButton(
-                            selected = selectedChampId == tm.id,
-                            onClick = { selectedChampId = tm.id }
+                            selected = selectedChampId == team.id,
+                            onClick = { selectedChampId = team.id }
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(tm.name)
+                        TeamCrestView(team = team, size = 26.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(team.name, fontSize = 13.sp, fontWeight = if (selectedChampId == team.id) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Selecciona el Subcampeón (Opcional):")
+                teams.filter { it.id != selectedChampId }.forEach { team ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedRunnerUpId = team.id }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.RadioButton(
+                            selected = selectedRunnerUpId == team.id,
+                            onClick = { selectedRunnerUpId = team.id }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        TeamCrestView(team = team, size = 26.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(team.name, fontSize = 13.sp)
                     }
                 }
             }
@@ -817,13 +1147,11 @@ private fun ChampionSelectDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (selectedChampId != null) {
-                        onSelect(selectedChampId!!, selectedRunnerUpId)
-                    }
+                    selectedChampId?.let { onSelect(it, selectedRunnerUpId) }
                 },
                 enabled = selectedChampId != null
             ) {
-                Text("Proclamar Campeón")
+                Text("Guardar Campeón")
             }
         },
         dismissButton = {

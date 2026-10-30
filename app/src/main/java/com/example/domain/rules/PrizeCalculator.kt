@@ -45,6 +45,13 @@ data class PrizeItem(
     val winnerNote: String = ""
 )
 
+enum class PrizeCategory(val id: String, val label: String) {
+    CHAMPION("champion", "Campeón"),
+    RUNNER_UP("runner_up", "Subcampeón"),
+    TOP_SCORER("top_scorer", "Goleador"),
+    BEST_GK("best_gk", "Mejor Portero")
+}
+
 object PrizeCalculator {
     fun calculate(
         tournament: Tournament,
@@ -174,5 +181,63 @@ object PrizeCalculator {
             estimatedNetBalance = estimatedNet,
             actualNetBalance = actualNet
         )
+    }
+
+    /**
+     * Rebalances percentages dynamically so the sum of all categories ALWAYS equals exactly 100%.
+     * When one percentage changes, the remaining percentage (100 - newValue) is proportionally
+     * distributed among the remaining categories.
+     */
+    fun rebalancePercentages(
+        changedCategory: String,
+        newValue: Double,
+        currentMap: Map<String, Double>
+    ): Map<String, Double> {
+        val clampedNew = newValue.coerceIn(0.0, 100.0)
+        val remainingBudget = 100.0 - clampedNew
+        val otherKeys = currentMap.keys.filter { it != changedCategory }
+
+        if (otherKeys.isEmpty()) {
+            return mapOf(changedCategory to 100.0)
+        }
+
+        val otherSum = otherKeys.sumOf { currentMap[it] ?: 0.0 }
+        val result = mutableMapOf<String, Double>()
+        result[changedCategory] = clampedNew
+
+        if (otherSum > 0.001) {
+            var distributed = 0.0
+            otherKeys.forEachIndexed { index, key ->
+                if (index == otherKeys.lastIndex) {
+                    // Last item absorbs rounding difference so sum is strictly 100.0
+                    result[key] = (remainingBudget - distributed).coerceAtLeast(0.0)
+                } else {
+                    val ratio = (currentMap[key] ?: 0.0) / otherSum
+                    val allocation = Math.round(remainingBudget * ratio * 10.0) / 10.0
+                    result[key] = allocation.coerceAtLeast(0.0)
+                    distributed += allocation
+                }
+            }
+        } else {
+            // Equal distribution if others were 0
+            val perItem = remainingBudget / otherKeys.size
+            otherKeys.forEach { key ->
+                result[key] = perItem
+            }
+        }
+
+        return result
+    }
+
+    fun rebalancePercentages(
+        changedCategory: PrizeCategory,
+        newValue: Float,
+        currentMap: Map<PrizeCategory, Float>
+    ): Map<PrizeCategory, Float> {
+        val stringMap = currentMap.mapKeys { it.key.id }.mapValues { it.value.toDouble() }
+        val rebalanced = rebalancePercentages(changedCategory.id, newValue.toDouble(), stringMap)
+        return PrizeCategory.values().associateWith { cat ->
+            (rebalanced[cat.id] ?: 0.0).toFloat()
+        }
     }
 }

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -33,7 +34,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,7 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -75,7 +75,6 @@ fun ShieldEditorDialog(
     onSaveShield: (Uri) -> Unit
 ) {
     val context = LocalContext.current
-    // Downscale to avoid lag/OOM
     val baseBitmap = remember(initialBitmap) {
         OfflineShieldRemover.scaleBitmapPreservingRatio(initialBitmap, 480)
     }
@@ -84,13 +83,23 @@ fun ShieldEditorDialog(
         mutableStateOf(baseBitmap.copy(Bitmap.Config.ARGB_8888, true))
     }
 
+    val undoStack = remember { mutableStateListOf<Bitmap>() }
+
     var tolerancePercentage by remember { mutableFloatStateOf(25f) }
-    var brushRadius by remember { mutableFloatStateOf(20f) }
+    var brushRadius by remember { mutableFloatStateOf(16f) }
     var selectedTool by remember { mutableStateOf("ERASER") } // ERASER, PENCIL
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
+    fun pushUndo() {
+        if (undoStack.size >= 5) {
+            undoStack.removeAt(0)
+        }
+        undoStack.add(currentBitmap.copy(Bitmap.Config.ARGB_8888, true))
+    }
+
     fun applyAutoTolerance(tol: Float) {
         try {
+            pushUndo()
             val processed = OfflineShieldRemover.removeColorBackground(
                 source = baseBitmap,
                 targetColor = baseBitmap.getPixel(0, 0),
@@ -109,14 +118,14 @@ fun ShieldEditorDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .padding(16.dp),
-            shape = RoundedCornerShape(20.dp),
+                .padding(12.dp),
+            shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Header
                 Row(
@@ -131,7 +140,7 @@ fun ShieldEditorDialog(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Elimina fondos y retoca manualmente",
+                            text = "Elimina fondos y retoca bordes con precisión",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -145,7 +154,7 @@ fun ShieldEditorDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(1f)
+                        .aspectRatio(1.1f)
                         .clip(RoundedCornerShape(14.dp))
                         .border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
                 ) {
@@ -175,33 +184,57 @@ fun ShieldEditorDialog(
                         )
                     }
 
-                    // Touch overlay for manual erasing/pencil
+                    // Touch overlay with fluid stroke drag gestures
+                    var lastTouchX by remember { mutableFloatStateOf(-1f) }
+                    var lastTouchY by remember { mutableFloatStateOf(-1f) }
+
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .pointerInput(selectedTool, brushRadius, currentBitmap) {
-                                detectDragGestures { change, _ ->
-                                    change.consume()
-                                    val touchX = change.position.x
-                                    val touchY = change.position.y
+                                detectDragGestures(
+                                    onDragStart = { offset ->
+                                        pushUndo()
+                                        lastTouchX = offset.x
+                                        lastTouchY = offset.y
+                                    },
+                                    onDragEnd = {
+                                        lastTouchX = -1f
+                                        lastTouchY = -1f
+                                    },
+                                    onDragCancel = {
+                                        lastTouchX = -1f
+                                        lastTouchY = -1f
+                                    },
+                                    onDrag = { change, _ ->
+                                        change.consume()
+                                        val touchX = change.position.x
+                                        val touchY = change.position.y
 
-                                    if (canvasSize.width > 0 && canvasSize.height > 0) {
-                                        val bmpX = (touchX / canvasSize.width) * currentBitmap.width
-                                        val bmpY = (touchY / canvasSize.height) * currentBitmap.height
-                                        val scaledRadius = (brushRadius / canvasSize.width) * currentBitmap.width
+                                        if (canvasSize.width > 0 && canvasSize.height > 0) {
+                                            val bmpX = (touchX / canvasSize.width) * currentBitmap.width
+                                            val bmpY = (touchY / canvasSize.height) * currentBitmap.height
+                                            val prevBmpX = if (lastTouchX >= 0) (lastTouchX / canvasSize.width) * currentBitmap.width else bmpX
+                                            val prevBmpY = if (lastTouchY >= 0) (lastTouchY / canvasSize.height) * currentBitmap.height else bmpY
+                                            val scaledRadius = (brushRadius / canvasSize.width) * currentBitmap.width
 
-                                        OfflineShieldRemover.applyBrush(
-                                            bitmap = currentBitmap,
-                                            x = bmpX,
-                                            y = bmpY,
-                                            radius = scaledRadius.coerceAtLeast(3f),
-                                            isErase = selectedTool == "ERASER",
-                                            paintColor = AndroidColor.WHITE
-                                        )
-                                        // Trigger recompose
-                                        currentBitmap = currentBitmap.copy(Bitmap.Config.ARGB_8888, true)
+                                            OfflineShieldRemover.applyBrushLine(
+                                                bitmap = currentBitmap,
+                                                startX = prevBmpX,
+                                                startY = prevBmpY,
+                                                endX = bmpX,
+                                                endY = bmpY,
+                                                radius = scaledRadius.coerceAtLeast(2f),
+                                                isErase = selectedTool == "ERASER",
+                                                paintColor = AndroidColor.WHITE
+                                            )
+
+                                            lastTouchX = touchX
+                                            lastTouchY = touchY
+                                            currentBitmap = currentBitmap.copy(Bitmap.Config.ARGB_8888, true)
+                                        }
                                     }
-                                }
+                                )
                             }
                     )
                 }
@@ -214,10 +247,11 @@ fun ShieldEditorDialog(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                     )
                 ) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -237,10 +271,25 @@ fun ShieldEditorDialog(
                     }
                 }
 
-                // Manual Tools: Eraser vs Pencil and Brush size
+                // Brush radius slider
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Grosor: ${brushRadius.toInt()}px", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Slider(
+                        value = brushRadius,
+                        onValueChange = { brushRadius = it },
+                        valueRange = 6f..48f,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Manual Tools: Eraser vs Pencil, Undo and Reset
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilterChip(
@@ -255,24 +304,37 @@ fun ShieldEditorDialog(
                         label = { Text("Lápiz", fontSize = 12.sp) },
                         leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp)) }
                     )
+
                     Spacer(modifier = Modifier.weight(1f))
-                    OutlinedButton(
+
+                    // Undo button
+                    IconButton(
                         onClick = {
+                            if (undoStack.isNotEmpty()) {
+                                currentBitmap = undoStack.removeAt(undoStack.lastIndex)
+                            }
+                        },
+                        enabled = undoStack.isNotEmpty()
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Deshacer")
+                    }
+
+                    // Reset button
+                    IconButton(
+                        onClick = {
+                            pushUndo()
                             currentBitmap = baseBitmap.copy(Bitmap.Config.ARGB_8888, true)
                             tolerancePercentage = 0f
-                        },
-                        shape = RoundedCornerShape(10.dp)
+                        }
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Reiniciar", fontSize = 11.sp)
+                        Icon(Icons.Default.Refresh, contentDescription = "Reiniciar")
                     }
                 }
 
                 // Actions: Cancel & Save
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,

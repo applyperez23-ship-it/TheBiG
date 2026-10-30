@@ -4,18 +4,35 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Outer Shield Crest -->
+    <!-- Modern Minimalist Trophy - Left Half (Gold / Amber) -->
     <path
-        android:fillColor="#0F172A"
-        android:strokeColor="#F59E0B"
-        android:strokeWidth="3.5"
-        android:pathData="M54,22 L82,34 L82,62 L54,84 L26,62 L26,34 Z" />
-    <!-- Dynamic Chevron -->
+        android:fillColor="#FBBF24"
+        android:pathData="M52,28 L36,28 C34,28 32,30 32,32 L32,46 C32,56 40,64 50,65.8 L50,72 L42,72 C40,72 38,74 38,76 L38,80 L52,80 Z" />
+    
+    <!-- Left Trophy Handle -->
     <path
         android:fillColor="#F59E0B"
-        android:pathData="M38,40 L60,40 L72,53 L60,66 L38,66 L50,53 Z" />
-    <!-- Green Emerald Center -->
+        android:pathData="M32,34 L26,34 C23,34 21,36 21,39 L21,45 C21,50 25,54 30,54 L32,54 L32,48 L30,48 C28,48 26,46 26,44 L26,40 C26,39 27,38 28,38 L32,38 Z" />
+
+    <!-- Modern Minimalist Trophy - Right Half (Emerald Accent) -->
     <path
         android:fillColor="#10B981"
-        android:pathData="M54,53m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+        android:pathData="M56,28 L72,28 C74,28 76,30 76,32 L76,46 C76,56 68,64 58,65.8 L58,72 L66,72 C68,72 70,74 70,76 L70,80 L56,80 Z" />
+
+    <!-- Right Trophy Handle -->
+    <path
+        android:fillColor="#059669"
+        android:pathData="M76,34 L82,34 C85,34 87,36 87,39 L87,45 C87,50 83,54 78,54 L76,54 L76,48 L78,48 C80,48 82,46 82,44 L82,40 C82,39 81,38 80,38 L76,38 Z" />
+
+    <!-- Sharp Diagonal Cutting Line Divider -->
+    <path
+        android:strokeColor="#090D16"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M24,84 L84,24" />
+
+    <!-- Center Trophy Star Accent -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,42 L55.5,45.5 L59,46 L56.5,48.5 L57,52 L54,50.2 L51,52 L51.5,48.5 L49,46 L52.5,45.5 Z" />
 </vector>

@@ -25,8 +25,11 @@ data class LiveTimerState(
     val elapsedSeconds: Int = 0,
     val totalDurationMinutes: Int = 20,
     val isRunning: Boolean = false,
-    val currentPeriod: String = "FIRST_HALF" // FIRST_HALF, HALF_TIME, SECOND_HALF, EXTRA_TIME, PENALTIES
+    val currentPeriod: String = "1er Tiempo" // "1er Tiempo", "Descanso", "2do Tiempo", "Tiempo Extra", "Penaltis"
 ) {
+    val halfTimeSeconds: Int
+        get() = (totalDurationMinutes * 60) / 2
+
     val remainingSeconds: Int
         get() = ((totalDurationMinutes * 60) - elapsedSeconds).coerceAtLeast(0)
 
@@ -40,7 +43,7 @@ data class LiveTimerState(
         get() = "%02d:00".format(totalDurationMinutes)
 
     /**
-     * Complete requested clock format: "04:37 / 20:00 - Restan 15:23"
+     * Complete referee clock format: "04:37 / 20:00 - Restan 15:23"
      */
     val fullClockDisplay: String
         get() = "$formattedElapsed / $formattedTotal - Restan $formattedRemaining"
@@ -69,7 +72,13 @@ class MatchTimerService : Service() {
                 val away = intent.getStringExtra(EXTRA_AWAY_NAME) ?: ""
                 val duration = intent.getIntExtra(EXTRA_DURATION, 20)
                 val elapsed = intent.getIntExtra(EXTRA_ELAPSED, 0)
-                val period = intent.getStringExtra(EXTRA_PERIOD) ?: "FIRST_HALF"
+                val halfTime = (duration * 60) / 2
+                val period = when {
+                    elapsed >= duration * 60 -> "Finalizado"
+                    elapsed > halfTime -> "2do Tiempo"
+                    elapsed == halfTime -> "Descanso"
+                    else -> "1er Tiempo"
+                }
 
                 _timerState.value = LiveTimerState(
                     matchId = matchId,
@@ -89,6 +98,16 @@ class MatchTimerService : Service() {
             ACTION_RESUME -> {
                 resumeTimer()
             }
+            ACTION_START_SECOND_HALF -> {
+                val current = _timerState.value
+                val halfTime = current.halfTimeSeconds
+                _timerState.value = current.copy(
+                    elapsedSeconds = if (current.elapsedSeconds < halfTime) halfTime else current.elapsedSeconds,
+                    currentPeriod = "2do Tiempo",
+                    isRunning = true
+                )
+                startTimer()
+            }
             ACTION_STOP -> {
                 stopTimer()
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -106,7 +125,21 @@ class MatchTimerService : Service() {
                 delay(1000)
                 val current = _timerState.value
                 val newElapsed = current.elapsedSeconds + 1
-                _timerState.value = current.copy(elapsedSeconds = newElapsed)
+                val halfTime = current.halfTimeSeconds
+
+                // Automatically switch to Descanso (Half-time) when reaching halfTime
+                if (current.currentPeriod == "1er Tiempo" && newElapsed >= halfTime) {
+                    _timerState.value = current.copy(
+                        elapsedSeconds = halfTime,
+                        currentPeriod = "Descanso",
+                        isRunning = false
+                    )
+                    notificationManager.notify(NOTIFICATION_ID, buildNotification(_timerState.value))
+                    break
+                }
+
+                val period = if (newElapsed > halfTime) "2do Tiempo" else "1er Tiempo"
+                _timerState.value = current.copy(elapsedSeconds = newElapsed, currentPeriod = period)
                 notificationManager.notify(NOTIFICATION_ID, buildNotification(_timerState.value))
             }
         }
@@ -119,7 +152,9 @@ class MatchTimerService : Service() {
     }
 
     private fun resumeTimer() {
-        _timerState.value = _timerState.value.copy(isRunning = true)
+        val current = _timerState.value
+        val period = if (current.currentPeriod == "Descanso") "2do Tiempo" else current.currentPeriod
+        _timerState.value = current.copy(isRunning = true, currentPeriod = period)
         startTimer()
     }
 
@@ -161,6 +196,7 @@ class MatchTimerService : Service() {
         const val ACTION_START = "com.example.service.ACTION_START"
         const val ACTION_PAUSE = "com.example.service.ACTION_PAUSE"
         const val ACTION_RESUME = "com.example.service.ACTION_RESUME"
+        const val ACTION_START_SECOND_HALF = "com.example.service.ACTION_START_SECOND_HALF"
         const val ACTION_STOP = "com.example.service.ACTION_STOP"
 
         const val EXTRA_MATCH_ID = "extra_match_id"

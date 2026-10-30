@@ -60,7 +60,13 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
         }
     }
 
-    fun startLiveMatch(context: Context, match: Match, homeTeam: Team, awayTeam: Team) {
+    fun startLiveMatch(
+        context: Context,
+        match: Match,
+        homeTeam: Team,
+        awayTeam: Team,
+        durationMinutes: Int
+    ) {
         viewModelScope.launch {
             repository.updateMatch(match.copy(status = "LIVE"))
             val intent = Intent(context, MatchTimerService::class.java).apply {
@@ -68,7 +74,7 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
                 putExtra(MatchTimerService.EXTRA_MATCH_ID, match.id)
                 putExtra(MatchTimerService.EXTRA_HOME_NAME, homeTeam.name)
                 putExtra(MatchTimerService.EXTRA_AWAY_NAME, awayTeam.name)
-                putExtra(MatchTimerService.EXTRA_DURATION, 20)
+                putExtra(MatchTimerService.EXTRA_DURATION, durationMinutes)
                 putExtra(MatchTimerService.EXTRA_ELAPSED, match.elapsedSeconds)
                 putExtra(MatchTimerService.EXTRA_PERIOD, match.currentPeriod)
             }
@@ -90,6 +96,13 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
         context.startService(intent)
     }
 
+    fun startSecondHalf(context: Context) {
+        val intent = Intent(context, MatchTimerService::class.java).apply {
+            action = MatchTimerService.ACTION_START_SECOND_HALF
+        }
+        context.startService(intent)
+    }
+
     fun finishMatch(context: Context, matchId: Long, elapsedSeconds: Int) {
         viewModelScope.launch {
             val m = repository.getMatchOnce(matchId) ?: return@launch
@@ -104,7 +117,7 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
     fun addGoal(
         matchId: Long,
         teamId: Long,
-        playerId: Long?,
+        playerId: Long,
         assistPlayerId: Long?,
         isOwnGoal: Boolean,
         isPenalty: Boolean,
@@ -128,7 +141,7 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
         }
     }
 
-    fun addPenaltyMissed(matchId: Long, teamId: Long, playerId: Long?, minute: Int) {
+    fun addPenaltyMissed(matchId: Long, teamId: Long, playerId: Long, minute: Int) {
         viewModelScope.launch {
             val event = MatchEvent(
                 matchId = matchId,
@@ -142,7 +155,7 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
         }
     }
 
-    fun addCard(matchId: Long, teamId: Long, playerId: Long?, isRed: Boolean, minute: Int) {
+    fun addCard(matchId: Long, teamId: Long, playerId: Long, isRed: Boolean, minute: Int) {
         viewModelScope.launch {
             val event = MatchEvent(
                 matchId = matchId,
@@ -155,7 +168,7 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
         }
     }
 
-    fun addSubstitution(matchId: Long, teamId: Long, playerOutId: Long?, playerInId: Long?, minute: Int) {
+    fun addSubstitution(matchId: Long, teamId: Long, playerOutId: Long, playerInId: Long, minute: Int) {
         viewModelScope.launch {
             val event = MatchEvent(
                 matchId = matchId,
