@@ -3,6 +3,7 @@ package com.example.util
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,16 +36,16 @@ import java.io.FileOutputStream
 object TeamCrestHelper {
 
     val PRESET_NAMES = listOf(
-        "Escudo Clásico",
-        "Corona Real",
-        "Estrella de Oro",
-        "Diamante Elite",
-        "Hexágono Moderno",
-        "Insignia Circular",
-        "Estandarte Victorioso",
-        "Fortaleza Defensiva",
-        "Rayo Dinámico",
-        "Laurel de Campeón"
+        "Escudo Real Ibérico",
+        "Blasón Premier Point",
+        "Escudo Chevron Galo",
+        "Calcio Aerodinámico",
+        "Ojival Gótico",
+        "Fortaleza Imperial",
+        "Diamante Dinastía",
+        "Insignia Nórdica",
+        "Laurel Centenario",
+        "Vanguardia Moderna"
     )
 
     fun parseColor(hex: String, default: Color): Color {
@@ -156,7 +157,7 @@ object TeamCrestHelper {
         }
 
         // Otherwise draw vector preset on canvas
-        val primary = try { android.graphics.Color.parseColor(team.primaryColorHex) } catch (e: Exception) { android.graphics.Color.parseColor("#F59E0B") }
+        val primary = try { android.graphics.Color.parseColor(team.shieldPrimaryColorHex) } catch (e: Exception) { android.graphics.Color.parseColor("#F59E0B") }
         val secondary = try { android.graphics.Color.parseColor(team.secondaryColorHex) } catch (e: Exception) { android.graphics.Color.parseColor("#0F172A") }
         val border = try { android.graphics.Color.parseColor(team.borderColorHex) } catch (e: Exception) { android.graphics.Color.WHITE }
 
@@ -216,7 +217,7 @@ fun TeamCrestView(
     if (team != null) {
         TeamCrestView(
             shieldIndex = team.shieldVectorIndex,
-            primaryColorHex = team.primaryColorHex,
+            primaryColorHex = team.shieldPrimaryColorHex,
             secondaryColorHex = team.secondaryColorHex,
             borderColorHex = team.borderColorHex,
             shortName = team.shortName,
@@ -227,10 +228,10 @@ fun TeamCrestView(
     } else {
         TeamCrestView(
             shieldIndex = 0,
-            primaryColorHex = "#64748B",
-            secondaryColorHex = "#334155",
-            borderColorHex = "#94A3B8",
-            shortName = "TB",
+            primaryColorHex = "#F59E0B",
+            secondaryColorHex = "#0F172A",
+            borderColorHex = "#FFFFFF",
+            shortName = "BIG",
             size = size,
             modifier = modifier
         )
@@ -277,204 +278,356 @@ fun TeamCrestView(
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = this.size.width
-            val h = this.size.height
+                val w = this.size.width
+                val h = this.size.height
 
-            when (shieldIndex % 10) {
-                0 -> drawClassicShield(w, h, primary, secondary, border)
-                1 -> drawCrownShield(w, h, primary, secondary, border)
-                2 -> drawStarShield(w, h, primary, secondary, border)
-                3 -> drawDiamondShield(w, h, primary, secondary, border)
-                4 -> drawHexagonShield(w, h, primary, secondary, border)
-                5 -> drawCircularBadge(w, h, primary, secondary, border)
-                6 -> drawBannerPennant(w, h, primary, secondary, border)
-                7 -> drawFortressShield(w, h, primary, secondary, border)
-                8 -> drawLightningShield(w, h, primary, secondary, border)
-                else -> drawLaurelShield(w, h, primary, secondary, border)
+                when (shieldIndex % 10) {
+                    0 -> drawIberianCrownCrest(w, h, primary, secondary, border)
+                    1 -> drawPremierPointCrest(w, h, primary, secondary, border)
+                    2 -> drawFrenchChevronCrest(w, h, primary, secondary, border)
+                    3 -> drawCalcioAerodynamicCrest(w, h, primary, secondary, border)
+                    4 -> drawGothicChevronCrest(w, h, primary, secondary, border)
+                    5 -> drawBattlementFortressCrest(w, h, primary, secondary, border)
+                    6 -> drawDynastyDiamondCrest(w, h, primary, secondary, border)
+                    7 -> drawNordicCrossCrest(w, h, primary, secondary, border)
+                    8 -> drawCentenaryLaurelCrest(w, h, primary, secondary, border)
+                    else -> drawVanguardModernCrest(w, h, primary, secondary, border)
+                }
             }
-        }
 
-        if (shortName.isNotBlank() && size >= 40.dp) {
-            Text(
-                text = shortName.take(3).uppercase(),
-                color = border,
-                fontSize = (size.value * 0.28f).sp,
-                fontWeight = FontWeight.Black
-            )
+            if (shortName.isNotBlank() && size >= 32.dp) {
+                // Renders monogram in the designated crest plate
+                Text(
+                    text = shortName.take(3).uppercase(),
+                    color = border,
+                    fontSize = (size.value * 0.26f).sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.padding(bottom = (size.value * 0.08f).dp)
+                )
+            }
         }
     }
 }
-}
 
-private fun DrawScope.drawClassicShield(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
+// 1. Escudo Real Ibérico
+private fun DrawScope.drawIberianCrownCrest(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
     val path = Path().apply {
-        moveTo(w * 0.1f, h * 0.15f)
-        lineTo(w * 0.9f, h * 0.15f)
-        lineTo(w * 0.9f, h * 0.55f)
-        quadraticBezierTo(w * 0.9f, h * 0.85f, w * 0.5f, h * 0.95f)
-        quadraticBezierTo(w * 0.1f, h * 0.85f, w * 0.1f, h * 0.55f)
+        moveTo(w * 0.12f, h * 0.18f)
+        lineTo(w * 0.88f, h * 0.18f)
+        lineTo(w * 0.88f, h * 0.58f)
+        quadraticBezierTo(w * 0.88f, h * 0.90f, w * 0.50f, h * 0.98f)
+        quadraticBezierTo(w * 0.12f, h * 0.90f, w * 0.12f, h * 0.58f)
         close()
     }
     drawPath(path, primary, style = Fill)
-    // Vertical half split
+
+    // Vertical striped halves
     val halfPath = Path().apply {
-        moveTo(w * 0.5f, h * 0.15f)
-        lineTo(w * 0.9f, h * 0.15f)
-        lineTo(w * 0.9f, h * 0.55f)
-        quadraticBezierTo(w * 0.9f, h * 0.85f, w * 0.5f, h * 0.95f)
+        moveTo(w * 0.50f, h * 0.18f)
+        lineTo(w * 0.88f, h * 0.18f)
+        lineTo(w * 0.88f, h * 0.58f)
+        quadraticBezierTo(w * 0.88f, h * 0.90f, w * 0.50f, h * 0.98f)
         close()
     }
     drawPath(halfPath, secondary, style = Fill)
-    drawPath(path, border, style = Stroke(width = w * 0.06f))
+
+    // Upper Crown / Monogram Bar
+    val bar = Path().apply {
+        moveTo(w * 0.12f, h * 0.18f)
+        lineTo(w * 0.88f, h * 0.18f)
+        lineTo(w * 0.88f, h * 0.44f)
+        lineTo(w * 0.50f, h * 0.50f)
+        lineTo(w * 0.12f, h * 0.44f)
+        close()
+    }
+    drawPath(bar, secondary.copy(alpha = 0.85f), style = Fill)
+    drawPath(bar, border, style = Stroke(width = w * 0.035f))
+    drawPath(path, border, style = Stroke(width = w * 0.065f))
 }
 
-private fun DrawScope.drawCrownShield(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
+// 2. Blasón Premier Point
+private fun DrawScope.drawPremierPointCrest(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
     val path = Path().apply {
-        moveTo(w * 0.15f, h * 0.25f)
-        lineTo(w * 0.35f, h * 0.1f)
-        lineTo(w * 0.5f, h * 0.25f)
-        lineTo(w * 0.65f, h * 0.1f)
-        lineTo(w * 0.85f, h * 0.25f)
-        lineTo(w * 0.85f, h * 0.6f)
-        lineTo(w * 0.5f, h * 0.92f)
-        lineTo(w * 0.15f, h * 0.6f)
+        moveTo(w * 0.50f, h * 0.06f)
+        lineTo(w * 0.90f, h * 0.16f)
+        lineTo(w * 0.84f, h * 0.62f)
+        lineTo(w * 0.50f, h * 0.96f)
+        lineTo(w * 0.16f, h * 0.62f)
+        lineTo(w * 0.10f, h * 0.16f)
         close()
     }
     drawPath(path, primary, style = Fill)
-    drawCircle(secondary, radius = w * 0.22f, center = Offset(w * 0.5f, h * 0.52f))
-    drawPath(path, border, style = Stroke(width = w * 0.06f))
-}
 
-private fun DrawScope.drawStarShield(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
-    val path = Path().apply {
-        moveTo(w * 0.5f, h * 0.08f)
-        lineTo(w * 0.9f, h * 0.25f)
-        lineTo(w * 0.75f, h * 0.88f)
-        lineTo(w * 0.5f, h * 0.95f)
-        lineTo(w * 0.25f, h * 0.88f)
-        lineTo(w * 0.1f, h * 0.25f)
+    // Dual-chevron lower accent
+    val chevron = Path().apply {
+        moveTo(w * 0.16f, h * 0.50f)
+        lineTo(w * 0.50f, h * 0.72f)
+        lineTo(w * 0.84f, h * 0.50f)
+        lineTo(w * 0.84f, h * 0.62f)
+        lineTo(w * 0.50f, h * 0.96f)
+        lineTo(w * 0.16f, h * 0.62f)
         close()
     }
-    drawPath(path, secondary, style = Fill)
-    drawCircle(primary, radius = w * 0.28f, center = Offset(w * 0.5f, h * 0.5f))
-    drawPath(path, border, style = Stroke(width = w * 0.06f))
+    drawPath(chevron, secondary, style = Fill)
+
+    // Upper monogram banner
+    drawCircle(secondary, radius = w * 0.28f, center = Offset(w * 0.50f, h * 0.38f))
+    drawCircle(border, radius = w * 0.28f, center = Offset(w * 0.50f, h * 0.38f), style = Stroke(width = w * 0.035f))
+    drawPath(path, border, style = Stroke(width = w * 0.065f))
 }
 
-private fun DrawScope.drawDiamondShield(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
+// 3. Escudo Chevron Galo
+private fun DrawScope.drawFrenchChevronCrest(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
     val path = Path().apply {
-        moveTo(w * 0.5f, h * 0.08f)
-        lineTo(w * 0.92f, h * 0.5f)
-        lineTo(w * 0.5f, h * 0.92f)
-        lineTo(w * 0.08f, h * 0.5f)
+        moveTo(w * 0.14f, h * 0.12f)
+        lineTo(w * 0.86f, h * 0.12f)
+        lineTo(w * 0.86f, h * 0.60f)
+        quadraticBezierTo(w * 0.80f, h * 0.86f, w * 0.50f, h * 0.96f)
+        quadraticBezierTo(w * 0.20f, h * 0.86f, w * 0.14f, h * 0.60f)
         close()
     }
     drawPath(path, primary, style = Fill)
+
+    // Diagonal Sash
+    val sash = Path().apply {
+        moveTo(w * 0.14f, h * 0.25f)
+        lineTo(w * 0.40f, h * 0.12f)
+        lineTo(w * 0.86f, h * 0.65f)
+        lineTo(w * 0.60f, h * 0.82f)
+        close()
+    }
+    drawPath(sash, secondary, style = Fill)
+
+    // Upper monogram badge
+    val topPlate = Path().apply {
+        moveTo(w * 0.22f, h * 0.12f)
+        lineTo(w * 0.78f, h * 0.12f)
+        lineTo(w * 0.70f, h * 0.36f)
+        lineTo(w * 0.30f, h * 0.36f)
+        close()
+    }
+    drawPath(topPlate, secondary, style = Fill)
+    drawPath(path, border, style = Stroke(width = w * 0.065f))
+}
+
+// 4. Calcio Aerodinámico
+private fun DrawScope.drawCalcioAerodynamicCrest(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
+    val path = Path().apply {
+        moveTo(w * 0.50f, h * 0.08f)
+        quadraticBezierTo(w * 0.90f, h * 0.18f, w * 0.86f, h * 0.60f)
+        quadraticBezierTo(w * 0.82f, h * 0.86f, w * 0.50f, h * 0.96f)
+        quadraticBezierTo(w * 0.18f, h * 0.86f, w * 0.14f, h * 0.60f)
+        quadraticBezierTo(w * 0.10f, h * 0.18f, w * 0.50f, h * 0.08f)
+        close()
+    }
+    drawPath(path, primary, style = Fill)
+
+    // Lower pointed oval accent
     val inner = Path().apply {
-        moveTo(w * 0.5f, h * 0.22f)
-        lineTo(w * 0.78f, h * 0.5f)
-        lineTo(w * 0.5f, h * 0.78f)
-        lineTo(w * 0.22f, h * 0.5f)
+        moveTo(w * 0.50f, h * 0.35f)
+        lineTo(w * 0.80f, h * 0.60f)
+        lineTo(w * 0.50f, h * 0.88f)
+        lineTo(w * 0.20f, h * 0.60f)
         close()
     }
     drawPath(inner, secondary, style = Fill)
-    drawPath(path, border, style = Stroke(width = w * 0.06f))
+
+    // Top Stars accent
+    drawCircle(border, radius = w * 0.035f, center = Offset(w * 0.36f, h * 0.20f))
+    drawCircle(border, radius = w * 0.045f, center = Offset(w * 0.50f, h * 0.16f))
+    drawCircle(border, radius = w * 0.035f, center = Offset(w * 0.64f, h * 0.20f))
+
+    drawPath(path, border, style = Stroke(width = w * 0.065f))
 }
 
-private fun DrawScope.drawHexagonShield(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
+// 5. Ojival Gótico
+private fun DrawScope.drawGothicChevronCrest(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
     val path = Path().apply {
-        moveTo(w * 0.5f, h * 0.08f)
-        lineTo(w * 0.88f, h * 0.28f)
-        lineTo(w * 0.88f, h * 0.72f)
-        lineTo(w * 0.5f, h * 0.92f)
-        lineTo(w * 0.12f, h * 0.72f)
-        lineTo(w * 0.12f, h * 0.28f)
-        close()
-    }
-    drawPath(path, primary, style = Fill)
-    drawLine(secondary, Offset(w * 0.12f, h * 0.5f), Offset(w * 0.88f, h * 0.5f), strokeWidth = w * 0.1f)
-    drawPath(path, border, style = Stroke(width = w * 0.06f))
-}
-
-private fun DrawScope.drawCircularBadge(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
-    drawCircle(primary, radius = w * 0.44f, center = Offset(w * 0.5f, h * 0.5f))
-    drawCircle(secondary, radius = w * 0.32f, center = Offset(w * 0.5f, h * 0.5f))
-    drawCircle(border, radius = w * 0.44f, center = Offset(w * 0.5f, h * 0.5f), style = Stroke(width = w * 0.06f))
-}
-
-private fun DrawScope.drawBannerPennant(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
-    val path = Path().apply {
-        moveTo(w * 0.15f, h * 0.1f)
-        lineTo(w * 0.85f, h * 0.1f)
-        lineTo(w * 0.85f, h * 0.85f)
-        lineTo(w * 0.5f, h * 0.65f)
-        lineTo(w * 0.15f, h * 0.85f)
-        close()
-    }
-    drawPath(path, primary, style = Fill)
-    val stripe = Path().apply {
-        moveTo(w * 0.4f, h * 0.1f)
-        lineTo(w * 0.6f, h * 0.1f)
-        lineTo(w * 0.6f, h * 0.7f)
-        lineTo(w * 0.4f, h * 0.7f)
-        close()
-    }
-    drawPath(stripe, secondary, style = Fill)
-    drawPath(path, border, style = Stroke(width = w * 0.06f))
-}
-
-private fun DrawScope.drawFortressShield(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
-    val path = Path().apply {
-        moveTo(w * 0.12f, h * 0.12f)
-        lineTo(w * 0.32f, h * 0.12f)
-        lineTo(w * 0.32f, h * 0.22f)
-        lineTo(w * 0.48f, h * 0.22f)
-        lineTo(w * 0.48f, h * 0.12f)
-        lineTo(w * 0.68f, h * 0.12f)
-        lineTo(w * 0.68f, h * 0.22f)
+        moveTo(w * 0.50f, h * 0.06f)
         lineTo(w * 0.88f, h * 0.22f)
-        lineTo(w * 0.88f, h * 0.55f)
-        lineTo(w * 0.5f, h * 0.9f)
-        lineTo(w * 0.12f, h * 0.55f)
+        lineTo(w * 0.88f, h * 0.60f)
+        lineTo(w * 0.50f, h * 0.96f)
+        lineTo(w * 0.12f, h * 0.60f)
+        lineTo(w * 0.12f, h * 0.22f)
+        close()
+    }
+    drawPath(path, primary, style = Fill)
+
+    // Left half contrast
+    val leftHalf = Path().apply {
+        moveTo(w * 0.50f, h * 0.06f)
+        lineTo(w * 0.50f, h * 0.96f)
+        lineTo(w * 0.12f, h * 0.60f)
+        lineTo(w * 0.12f, h * 0.22f)
+        close()
+    }
+    drawPath(leftHalf, secondary, style = Fill)
+
+    // Central Monogram Chevron
+    val chev = Path().apply {
+        moveTo(w * 0.20f, h * 0.45f)
+        lineTo(w * 0.50f, h * 0.60f)
+        lineTo(w * 0.80f, h * 0.45f)
+        lineTo(w * 0.50f, h * 0.30f)
+        close()
+    }
+    drawPath(chev, primary.copy(alpha = 0.9f), style = Fill)
+    drawPath(chev, border, style = Stroke(width = w * 0.03f))
+
+    drawPath(path, border, style = Stroke(width = w * 0.065f))
+}
+
+// 6. Fortaleza Imperial
+private fun DrawScope.drawBattlementFortressCrest(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
+    val path = Path().apply {
+        moveTo(w * 0.14f, h * 0.12f)
+        lineTo(w * 0.32f, h * 0.12f)
+        lineTo(w * 0.32f, h * 0.20f)
+        lineTo(w * 0.44f, h * 0.20f)
+        lineTo(w * 0.44f, h * 0.12f)
+        lineTo(w * 0.56f, h * 0.12f)
+        lineTo(w * 0.56f, h * 0.20f)
+        lineTo(w * 0.68f, h * 0.20f)
+        lineTo(w * 0.68f, h * 0.12f)
+        lineTo(w * 0.86f, h * 0.12f)
+        lineTo(w * 0.86f, h * 0.58f)
+        quadraticBezierTo(w * 0.86f, h * 0.86f, w * 0.50f, h * 0.96f)
+        quadraticBezierTo(w * 0.14f, h * 0.86f, w * 0.14f, h * 0.58f)
+        close()
+    }
+    drawPath(path, primary, style = Fill)
+
+    // Right half in secondary
+    val rightHalf = Path().apply {
+        moveTo(w * 0.50f, h * 0.12f)
+        lineTo(w * 0.56f, h * 0.12f)
+        lineTo(w * 0.56f, h * 0.20f)
+        lineTo(w * 0.68f, h * 0.20f)
+        lineTo(w * 0.68f, h * 0.12f)
+        lineTo(w * 0.86f, h * 0.12f)
+        lineTo(w * 0.86f, h * 0.58f)
+        quadraticBezierTo(w * 0.86f, h * 0.86f, w * 0.50f, h * 0.96f)
+        close()
+    }
+    drawPath(rightHalf, secondary, style = Fill)
+
+    // Central Monogram Shield
+    drawCircle(secondary, radius = w * 0.24f, center = Offset(w * 0.50f, h * 0.48f))
+    drawPath(path, border, style = Stroke(width = w * 0.065f))
+}
+
+// 7. Diamante Dinastía
+private fun DrawScope.drawDynastyDiamondCrest(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
+    val path = Path().apply {
+        moveTo(w * 0.50f, h * 0.08f)
+        lineTo(w * 0.90f, h * 0.32f)
+        lineTo(w * 0.78f, h * 0.88f)
+        lineTo(w * 0.50f, h * 0.96f)
+        lineTo(w * 0.22f, h * 0.88f)
+        lineTo(w * 0.10f, h * 0.32f)
+        close()
+    }
+    drawPath(path, primary, style = Fill)
+
+    // Monogram Upper Hexagon
+    val plate = Path().apply {
+        moveTo(w * 0.50f, h * 0.14f)
+        lineTo(w * 0.82f, h * 0.32f)
+        lineTo(w * 0.72f, h * 0.60f)
+        lineTo(w * 0.28f, h * 0.60f)
+        lineTo(w * 0.18f, h * 0.32f)
+        close()
+    }
+    drawPath(plate, secondary, style = Fill)
+    drawPath(plate, border, style = Stroke(width = w * 0.035f))
+    drawPath(path, border, style = Stroke(width = w * 0.065f))
+}
+
+// 8. Insignia Nórdica
+private fun DrawScope.drawNordicCrossCrest(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
+    val path = Path().apply {
+        moveTo(w * 0.14f, h * 0.14f)
+        lineTo(w * 0.86f, h * 0.14f)
+        lineTo(w * 0.86f, h * 0.56f)
+        quadraticBezierTo(w * 0.86f, h * 0.88f, w * 0.50f, h * 0.96f)
+        quadraticBezierTo(w * 0.14f, h * 0.88f, w * 0.14f, h * 0.56f)
+        close()
+    }
+    drawPath(path, primary, style = Fill)
+
+    // Cross bars
+    drawLine(secondary, Offset(w * 0.14f, h * 0.44f), Offset(w * 0.86f, h * 0.44f), strokeWidth = w * 0.18f)
+    drawLine(secondary, Offset(w * 0.50f, h * 0.14f), Offset(w * 0.50f, h * 0.90f), strokeWidth = w * 0.18f)
+
+    // Monogram center badge
+    drawCircle(primary, radius = w * 0.22f, center = Offset(w * 0.50f, h * 0.44f))
+    drawCircle(border, radius = w * 0.22f, center = Offset(w * 0.50f, h * 0.44f), style = Stroke(width = w * 0.035f))
+    drawPath(path, border, style = Stroke(width = w * 0.065f))
+}
+
+// 9. Laurel Centenario
+private fun DrawScope.drawCentenaryLaurelCrest(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
+    val path = Path().apply {
+        moveTo(w * 0.18f, h * 0.16f)
+        lineTo(w * 0.82f, h * 0.16f)
+        lineTo(w * 0.82f, h * 0.56f)
+        quadraticBezierTo(w * 0.82f, h * 0.86f, w * 0.50f, h * 0.95f)
+        quadraticBezierTo(w * 0.18f, h * 0.86f, w * 0.18f, h * 0.56f)
         close()
     }
     drawPath(path, secondary, style = Fill)
-    drawCircle(primary, radius = w * 0.2f, center = Offset(w * 0.5f, h * 0.55f))
-    drawPath(path, border, style = Stroke(width = w * 0.06f))
+
+    // Inner shield
+    val inner = Path().apply {
+        moveTo(w * 0.26f, h * 0.22f)
+        lineTo(w * 0.74f, h * 0.22f)
+        lineTo(w * 0.74f, h * 0.54f)
+        quadraticBezierTo(w * 0.74f, h * 0.78f, w * 0.50f, h * 0.86f)
+        quadraticBezierTo(w * 0.26f, h * 0.78f, w * 0.26f, h * 0.54f)
+        close()
+    }
+    drawPath(inner, primary, style = Fill)
+
+    // Upper monogram header
+    val head = Path().apply {
+        moveTo(w * 0.22f, h * 0.16f)
+        lineTo(w * 0.78f, h * 0.16f)
+        lineTo(w * 0.68f, h * 0.40f)
+        lineTo(w * 0.32f, h * 0.40f)
+        close()
+    }
+    drawPath(head, secondary, style = Fill)
+    drawPath(head, border, style = Stroke(width = w * 0.035f))
+
+    drawPath(path, border, style = Stroke(width = w * 0.065f))
 }
 
-private fun DrawScope.drawLightningShield(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
+// 10. Vanguardia Moderna
+private fun DrawScope.drawVanguardModernCrest(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
     val path = Path().apply {
-        moveTo(w * 0.1f, h * 0.1f)
-        lineTo(w * 0.9f, h * 0.1f)
-        lineTo(w * 0.75f, h * 0.85f)
-        lineTo(w * 0.5f, h * 0.95f)
-        lineTo(w * 0.25f, h * 0.85f)
+        moveTo(w * 0.50f, h * 0.06f)
+        lineTo(w * 0.90f, h * 0.24f)
+        lineTo(w * 0.80f, h * 0.86f)
+        lineTo(w * 0.50f, h * 0.98f)
+        lineTo(w * 0.20f, h * 0.86f)
+        lineTo(w * 0.10f, h * 0.24f)
         close()
     }
     drawPath(path, primary, style = Fill)
-    val bolt = Path().apply {
-        moveTo(w * 0.55f, h * 0.2f)
-        lineTo(w * 0.35f, h * 0.52f)
-        lineTo(w * 0.52f, h * 0.52f)
-        lineTo(w * 0.42f, h * 0.82f)
-        lineTo(w * 0.68f, h * 0.46f)
-        lineTo(w * 0.52f, h * 0.46f)
-        close()
-    }
-    drawPath(bolt, secondary, style = Fill)
-    drawPath(path, border, style = Stroke(width = w * 0.06f))
-}
 
-private fun DrawScope.drawLaurelShield(w: Float, h: Float, primary: Color, secondary: Color, border: Color) {
-    val path = Path().apply {
-        moveTo(w * 0.5f, h * 0.1f)
-        quadraticBezierTo(w * 0.85f, h * 0.15f, w * 0.85f, h * 0.55f)
-        quadraticBezierTo(w * 0.85f, h * 0.85f, w * 0.5f, h * 0.95f)
-        quadraticBezierTo(w * 0.15f, h * 0.85f, w * 0.15f, h * 0.55f)
-        quadraticBezierTo(w * 0.15f, h * 0.15f, w * 0.5f, h * 0.1f)
+    // Center diagonal cut
+    val diag = Path().apply {
+        moveTo(w * 0.50f, h * 0.06f)
+        lineTo(w * 0.90f, h * 0.24f)
+        lineTo(w * 0.50f, h * 0.65f)
+        lineTo(w * 0.10f, h * 0.24f)
         close()
     }
-    drawPath(path, primary, style = Fill)
-    drawCircle(secondary, radius = w * 0.25f, center = Offset(w * 0.5f, h * 0.5f))
-    drawPath(path, border, style = Stroke(width = w * 0.06f))
+    drawPath(diag, secondary, style = Fill)
+
+    // Center monogram circle
+    drawCircle(primary, radius = w * 0.24f, center = Offset(w * 0.50f, h * 0.46f))
+    drawCircle(border, radius = w * 0.24f, center = Offset(w * 0.50f, h * 0.46f), style = Stroke(width = w * 0.035f))
+
+    drawPath(path, border, style = Stroke(width = w * 0.065f))
 }

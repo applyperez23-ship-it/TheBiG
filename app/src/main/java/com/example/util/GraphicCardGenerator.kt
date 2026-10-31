@@ -236,16 +236,23 @@ object GraphicCardGenerator {
         return bitmap
     }
 
+enum class ChampionDesignMode {
+    CENTERED_CONTAINED,
+    SPLIT_HALF,
+    FULL_BACKGROUND
+}
+
     /**
      * Generates the Official 1080x1080 px Champion Frame (Cuadro del Campeón):
-     * Large team crest, squad roster, captain highlighted with (C) gold armband,
-     * trophy badge, and "Desarrollado por Daniel (el Grande)" badge.
+     * 3 customizable design modes (Split-Half, Centered-Contained, Full-Background)
+     * with clean "TheBiG • [Mes Año]" watermark.
      */
     fun generateChampionFrameBitmap(
         tournament: Tournament,
         championTeam: Team,
         players: List<Player>,
-        customPhoto: Bitmap? = null
+        customPhoto: Bitmap? = null,
+        designMode: ChampionDesignMode = ChampionDesignMode.CENTERED_CONTAINED
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(CARD_SIZE, CARD_SIZE, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -261,19 +268,48 @@ object GraphicCardGenerator {
         bgPaint.shader = gradient
         canvas.drawRect(0f, 0f, CARD_SIZE.toFloat(), CARD_SIZE.toFloat(), bgPaint)
 
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        when (designMode) {
+            ChampionDesignMode.FULL_BACKGROUND -> {
+                if (customPhoto != null) {
+                    val enhancedPhoto = ImageEnhancer.enhanceCrestOrPhoto(customPhoto)
+                    val src = android.graphics.Rect(0, 0, enhancedPhoto.width, enhancedPhoto.height)
+                    val dst = RectF(0f, 0f, CARD_SIZE.toFloat(), CARD_SIZE.toFloat())
+                    canvas.drawBitmap(enhancedPhoto, src, dst, paint)
+
+                    // Dark overlay for legible typography
+                    val overlayPaint = Paint().apply {
+                        color = Color.argb(195, 15, 23, 42)
+                    }
+                    canvas.drawRect(0f, 0f, CARD_SIZE.toFloat(), CARD_SIZE.toFloat(), overlayPaint)
+                }
+            }
+            ChampionDesignMode.SPLIT_HALF -> {
+                if (customPhoto != null) {
+                    val enhancedPhoto = ImageEnhancer.enhanceCrestOrPhoto(customPhoto)
+                    val src = android.graphics.Rect(0, 0, enhancedPhoto.width, enhancedPhoto.height)
+                    val dst = RectF(50f, 220f, 520f, 880f)
+                    canvas.drawBitmap(enhancedPhoto, src, dst, paint)
+                }
+            }
+            ChampionDesignMode.CENTERED_CONTAINED -> {
+                // Centered contained photo or shield
+            }
+        }
+
         // Golden Outer Border Frame
-        val framePaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        framePaint.style = Paint.Style.STROKE
-        framePaint.strokeWidth = 14f
-        framePaint.color = Color.parseColor("#F59E0B")
+        val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 14f
+            color = Color.parseColor("#F59E0B")
+        }
         canvas.drawRoundRect(RectF(30f, 30f, 1050f, 1050f), 28f, 28f, framePaint)
 
         // Inner decorative gold line
         framePaint.strokeWidth = 3f
         framePaint.color = Color.parseColor("#B45309")
         canvas.drawRoundRect(RectF(44f, 44f, 1036f, 1036f), 20f, 20f, framePaint)
-
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
         // Trophy / Champion Header
         paint.color = Color.parseColor("#F59E0B")
@@ -293,62 +329,84 @@ object GraphicCardGenerator {
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         canvas.drawText("EDICION ${tournament.edition.uppercase()} • THEBIG FTBOL", 540f, 195f, paint)
 
-        // Large Crest or Custom Photo in Center
-        val crestCenterY = 360f
-        if (customPhoto != null) {
-            val enhancedPhoto = ImageEnhancer.enhanceCrestOrPhoto(customPhoto)
-            val destRect = RectF(400f, crestCenterY - 120f, 680f, crestCenterY + 140f)
-            canvas.drawBitmap(enhancedPhoto, null, destRect, paint)
+        if (designMode == ChampionDesignMode.SPLIT_HALF) {
+            // Right-aligned squad and team details
+            paint.color = Color.parseColor("#F59E0B")
+            paint.textSize = 38f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textAlign = Paint.Align.LEFT
+            canvas.drawText(championTeam.name.uppercase(), 560f, 270f, paint)
+
+            paint.color = Color.WHITE
+            paint.textSize = 22f
+            canvas.drawText("PLANTILLA CAMPEONA", 560f, 310f, paint)
+
+            paint.textSize = 20f
+            var curY = 350f
+            players.take(14).forEach { p ->
+                if (p.isCaptain) {
+                    paint.color = Color.parseColor("#F59E0B")
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    canvas.drawText("#${p.number} ${p.name} (C)", 560f, curY, paint)
+                } else {
+                    paint.color = Color.parseColor("#E2E8F0")
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    canvas.drawText("#${p.number} ${p.name}", 560f, curY, paint)
+                }
+                curY += 36f
+            }
         } else {
-            // Draw Large Team Crest Shield
-            drawVectorShield(canvas, 540f, crestCenterY, 110f, championTeam)
-        }
-
-        // Team Name in Big Bold Letters
-        paint.color = Color.parseColor("#F59E0B")
-        paint.textSize = 46f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        paint.textAlign = Paint.Align.CENTER
-        canvas.drawText(championTeam.name.uppercase(), 540f, 550f, paint)
-
-        // Squad List Header
-        paint.color = Color.WHITE
-        paint.textSize = 24f
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("PLANTILLA CAMPEONA", 540f, 600f, paint)
-
-        // Two columns of Players
-        val col1X = 140f
-        val col2X = 580f
-        var pY = 645f
-        val half = (players.size + 1) / 2
-
-        paint.textAlign = Paint.Align.LEFT
-        paint.textSize = 21f
-
-        players.take(16).forEachIndexed { i, p ->
-            val curX = if (i < half) col1X else col2X
-            val curY = if (i < half) pY + (i * 38f) else pY + ((i - half) * 38f)
-
-            if (p.isCaptain) {
-                // Gold highlight for captain
-                paint.color = Color.parseColor("#F59E0B")
-                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                canvas.drawText("#${p.number} ${p.name} (C)", curX, curY, paint)
+            // Large Crest or Custom Photo in Center
+            val crestCenterY = 360f
+            if (customPhoto != null && designMode == ChampionDesignMode.CENTERED_CONTAINED) {
+                val enhancedPhoto = ImageEnhancer.enhanceCrestOrPhoto(customPhoto)
+                val destRect = RectF(380f, crestCenterY - 130f, 700f, crestCenterY + 130f)
+                canvas.drawBitmap(enhancedPhoto, null, destRect, paint)
             } else {
-                paint.color = Color.parseColor("#E2E8F0")
-                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-                canvas.drawText("#${p.number} ${p.name}", curX, curY, paint)
+                drawVectorShield(canvas, 540f, crestCenterY, 100f, championTeam)
+            }
+
+            // Team Name in Big Bold Letters
+            paint.color = Color.parseColor("#F59E0B")
+            paint.textSize = 46f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textAlign = Paint.Align.CENTER
+            canvas.drawText(championTeam.name.uppercase(), 540f, 540f, paint)
+
+            paint.color = Color.WHITE
+            paint.textSize = 24f
+            canvas.drawText("PLANTILLA CAMPEONA", 540f, 590f, paint)
+
+            // Two columns of Players
+            val col1X = 140f
+            val col2X = 580f
+            val pY = 635f
+            val half = (players.size + 1) / 2
+            paint.textAlign = Paint.Align.LEFT
+            paint.textSize = 21f
+
+            players.take(16).forEachIndexed { i, p ->
+                val curX = if (i < half) col1X else col2X
+                val curPlayerY = if (i < half) pY + (i * 38f) else pY + ((i - half) * 38f)
+                if (p.isCaptain) {
+                    paint.color = Color.parseColor("#F59E0B")
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    canvas.drawText("#${p.number} ${p.name} (C)", curX, curPlayerY, paint)
+                } else {
+                    paint.color = Color.parseColor("#E2E8F0")
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    canvas.drawText("#${p.number} ${p.name}", curX, curPlayerY, paint)
+                }
             }
         }
 
-        // Mandatory Official Brand Badge
+        // Clean Official Watermark: "TheBiG • [Mes Año]"
         val badgeY = 990f
         paint.textAlign = Paint.Align.CENTER
         paint.color = Color.parseColor("#F59E0B")
         paint.textSize = 24f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("TheBiG • Torneo Oficial", 540f, badgeY, paint)
+        canvas.drawText("TheBiG • ${ChampionAwardInfo.getCurrentMonthYearSpanish()}", 540f, badgeY, paint)
 
         return bitmap
     }

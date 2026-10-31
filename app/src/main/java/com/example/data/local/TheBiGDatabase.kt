@@ -26,7 +26,7 @@ import com.example.data.local.entity.TournamentTeamCrossRef
         Match::class,
         MatchEvent::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class TheBiGDatabase : RoomDatabase() {

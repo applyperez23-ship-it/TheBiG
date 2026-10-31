@@ -35,7 +35,8 @@ class TeamViewModel(private val repository: TheBiGRepository) : ViewModel() {
         borderColorHex: String,
         customShieldUri: String? = null,
         jerseyPattern: String = "SOLID",
-        goalkeeperColorHex: String = "#10B981"
+        goalkeeperColorHex: String = "#10B981",
+        shieldPrimaryColorHex: String = primaryColorHex
     ): Long {
         val team = Team(
             name = name.trim(),
@@ -46,7 +47,8 @@ class TeamViewModel(private val repository: TheBiGRepository) : ViewModel() {
             borderColorHex = borderColorHex,
             customShieldUri = customShieldUri,
             jerseyPattern = jerseyPattern,
-            goalkeeperColorHex = goalkeeperColorHex
+            goalkeeperColorHex = goalkeeperColorHex,
+            shieldPrimaryColorHex = shieldPrimaryColorHex
         )
         return repository.saveTeam(team)
     }

@@ -14,13 +14,13 @@ import kotlin.math.sqrt
 object OfflineShieldRemover {
 
     /**
-     * Removes the background color of an image based on a target color and tolerance [0..100].
-     * Tolerance is converted to Euclidean RGB color distance.
+     * Removes the background color of an image strictly from the EXTERIOR boundaries inward.
+     * Uses a border-seeded BFS flood-fill algorithm so that interior design elements sharing
+     * similar colors (e.g., white stripes, white football, yellow stars) remain completely intact.
      */
-    fun removeColorBackground(
+    fun removeExteriorContourBackground(
         source: Bitmap,
-        targetColor: Int = source.getPixel(0, 0),
-        tolerancePercentage: Int = 20
+        tolerancePercentage: Int = 22
     ): Bitmap {
         val width = source.width
         val height = source.height
@@ -29,31 +29,103 @@ object OfflineShieldRemover {
         val pixels = IntArray(width * height)
         output.getPixels(pixels, 0, width, 0, 0, width, height)
 
+        // Sample border corner pixels to find representative background color
+        val cornerColors = intArrayOf(
+            pixels[0],
+            pixels[width - 1],
+            pixels[(height - 1) * width],
+            pixels[width * height - 1]
+        )
+        // Dominant corner color
+        val targetColor = cornerColors[0]
         val tr = Color.red(targetColor)
         val tg = Color.green(targetColor)
         val tb = Color.blue(targetColor)
 
-        // Max possible Euclidean distance in RGB is sqrt(255^2 * 3) ~ 441.67
         val maxDist = 441.67f
         val threshold = (tolerancePercentage / 100f) * maxDist
 
-        for (i in pixels.indices) {
-            val c = pixels[i]
+        fun isColorMatch(c: Int): Boolean {
+            val a = Color.alpha(c)
+            if (a == 0) return true
             val r = Color.red(c)
             val g = Color.green(c)
             val b = Color.blue(c)
+            val dist = sqrt(((r - tr) * (r - tr) + (g - tg) * (g - tg) + (b - tb) * (b - tb)).toDouble()).toFloat()
+            return dist <= threshold
+        }
 
-            val dist = sqrt(
-                ((r - tr) * (r - tr) + (g - tg) * (g - tg) + (b - tb) * (b - tb)).toDouble()
-            ).toFloat()
+        val visited = BooleanArray(width * height)
+        val queue = IntArray(width * height)
+        var head = 0
+        var tail = 0
 
-            if (dist <= threshold) {
-                pixels[i] = Color.TRANSPARENT
+        // Seed from all 4 borders
+        for (x in 0 until width) {
+            val topIdx = x
+            if (!visited[topIdx] && isColorMatch(pixels[topIdx])) {
+                visited[topIdx] = true
+                queue[tail++] = topIdx
+            }
+            val btmIdx = (height - 1) * width + x
+            if (!visited[btmIdx] && isColorMatch(pixels[btmIdx])) {
+                visited[btmIdx] = true
+                queue[tail++] = btmIdx
+            }
+        }
+        for (y in 0 until height) {
+            val leftIdx = y * width
+            if (!visited[leftIdx] && isColorMatch(pixels[leftIdx])) {
+                visited[leftIdx] = true
+                queue[tail++] = leftIdx
+            }
+            val rightIdx = y * width + (width - 1)
+            if (!visited[rightIdx] && isColorMatch(pixels[rightIdx])) {
+                visited[rightIdx] = true
+                queue[tail++] = rightIdx
+            }
+        }
+
+        // BFS traversal strictly confined to the exterior zone
+        val dx = intArrayOf(1, -1, 0, 0)
+        val dy = intArrayOf(0, 0, 1, -1)
+
+        while (head < tail) {
+            val curr = queue[head++]
+            pixels[curr] = Color.TRANSPARENT
+
+            val cx = curr % width
+            val cy = curr / width
+
+            for (i in 0 until 4) {
+                val nx = cx + dx[i]
+                val ny = cy + dy[i]
+
+                if (nx in 0 until width && ny in 0 until height) {
+                    val nIdx = ny * width + nx
+                    if (!visited[nIdx]) {
+                        visited[nIdx] = true
+                        if (isColorMatch(pixels[nIdx])) {
+                            queue[tail++] = nIdx
+                        }
+                    }
+                }
             }
         }
 
         output.setPixels(pixels, 0, width, 0, 0, width, height)
         return output
+    }
+
+    /**
+     * Backward-compatible alias directing to the smart contour algorithm.
+     */
+    fun removeColorBackground(
+        source: Bitmap,
+        targetColor: Int = source.getPixel(0, 0),
+        tolerancePercentage: Int = 20
+    ): Bitmap {
+        return removeExteriorContourBackground(source, tolerancePercentage)
     }
 
     /**

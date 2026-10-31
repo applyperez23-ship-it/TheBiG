@@ -20,6 +20,7 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
 
     fun getTournament(id: Long): Flow<Tournament?> = db.tournamentDao().getTournamentById(id)
     suspend fun getTournamentOnce(id: Long): Tournament? = db.tournamentDao().getTournamentByIdOnce(id)
+    suspend fun getAllTournamentsOnce(): List<Tournament> = db.tournamentDao().getAllTournamentsOnce()
     suspend fun saveTournament(tournament: Tournament): Long = db.tournamentDao().insertTournament(tournament)
     suspend fun updateTournament(tournament: Tournament) = db.tournamentDao().updateTournament(tournament)
     suspend fun deleteTournament(id: Long) = db.tournamentDao().deleteTournamentById(id)
@@ -29,6 +30,7 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
 
     fun getTeam(id: Long): Flow<Team?> = db.teamDao().getTeamById(id)
     suspend fun getTeamOnce(id: Long): Team? = db.teamDao().getTeamByIdOnce(id)
+    suspend fun getAllTeamsOnce(): List<Team> = db.teamDao().getAllTeamsOnce()
     fun getTeamsForTournament(tournamentId: Long): Flow<List<Team>> = db.teamDao().getTeamsForTournament(tournamentId)
     suspend fun getTeamsForTournamentOnce(tournamentId: Long): List<Team> = db.teamDao().getTeamsForTournamentOnce(tournamentId)
     suspend fun saveTeam(team: Team): Long = db.teamDao().insertTeam(team)
@@ -65,6 +67,16 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
     }
 
     suspend fun removeTeamFromTournament(tournamentId: Long, teamId: Long) {
+        val matches = db.matchDao().getMatchesForTournamentOnce(tournamentId)
+        for (m in matches) {
+            if (m.status != "FINISHED") {
+                if (m.homeTeamId == teamId) {
+                    db.matchDao().updateMatch(m.copy(homeScore = 0, awayScore = 3, status = "FINISHED"))
+                } else if (m.awayTeamId == teamId) {
+                    db.matchDao().updateMatch(m.copy(homeScore = 3, awayScore = 0, status = "FINISHED"))
+                }
+            }
+        }
         db.tournamentTeamDao().removeTeamFromTournament(tournamentId, teamId)
     }
 

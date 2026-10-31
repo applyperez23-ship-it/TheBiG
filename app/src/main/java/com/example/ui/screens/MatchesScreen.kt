@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
@@ -86,6 +87,7 @@ fun MatchesScreen(
     var selectedTournamentFilter by remember { mutableLongStateOf(0L) }
 
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showQuickFriendlyDialog by remember { mutableStateOf(false) }
     var matchToDelete by remember { mutableStateOf<Match?>(null) }
 
     LaunchedEffect(Unit) {
@@ -118,6 +120,20 @@ fun MatchesScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                },
+                actions = {
+                    Button(
+                        onClick = { showQuickFriendlyDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .testTag("quick_friendly_button")
+                    ) {
+                        Icon(Icons.Default.SportsSoccer, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Amistoso Rápido", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -318,6 +334,41 @@ fun MatchesScreen(
                 scope.launch {
                     viewModel.createMatch(tourneyId, homeId, awayId, round)
                     showCreateDialog = false
+                }
+            }
+        )
+    }
+
+    // Quick Friendly Match Dialog
+    if (showQuickFriendlyDialog) {
+        QuickFriendlyMatchDialog(
+            allTeams = allTeams,
+            onDismiss = { showQuickFriendlyDialog = false },
+            onConfirm = { homeId, awayId, duration ->
+                scope.launch {
+                    var friendlyTourney = tournaments.firstOrNull { it.name == "Amistosos" }
+                    if (friendlyTourney == null) {
+                        val tId = app.repository.saveTournament(
+                            Tournament(
+                                name = "Amistosos",
+                                edition = "1.7",
+                                matchDurationMinutes = duration,
+                                tournamentType = com.example.data.local.entity.TournamentModes.LEAGUE
+                            )
+                        )
+                        friendlyTourney = app.repository.getTournamentOnce(tId)
+                    }
+                    val newMatchId = app.repository.saveMatch(
+                        Match(
+                            tournamentId = friendlyTourney?.id ?: 1L,
+                            homeTeamId = homeId,
+                            awayTeamId = awayId,
+                            roundName = "Amistoso",
+                            status = "SCHEDULED"
+                        )
+                    )
+                    showQuickFriendlyDialog = false
+                    onMatchClick(newMatchId)
                 }
             }
         )
@@ -716,6 +767,134 @@ fun CreateMatchDialog(
             OutlinedButton(onClick = onDismiss) {
                 Text("Cancelar")
             }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun QuickFriendlyMatchDialog(
+    allTeams: List<Team>,
+    onDismiss: () -> Unit,
+    onConfirm: (homeId: Long, awayId: Long, duration: Int) -> Unit
+) {
+    if (allTeams.size < 2) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Se requieren al menos 2 equipos") },
+            text = { Text("Registra al menos 2 clubes en la pestaña Equipos para poder disputar un partido amistoso.") },
+            confirmButton = { Button(onClick = onDismiss) { Text("Entendido") } }
+        )
+        return
+    }
+
+    var homeTeam by remember { mutableStateOf(allTeams[0]) }
+    var awayTeam by remember { mutableStateOf(allTeams.getOrElse(1) { allTeams[0] }) }
+    var durationText by remember { mutableStateOf("20") }
+    var expandedHome by remember { mutableStateOf(false) }
+    var expandedAway by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = Color(0xFF10B981))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Partido Rápido / Amistoso", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Inicia un partido amistoso directo. Las estadísticas de goles y asistencias se sumarán a la carrera de los jugadores.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Home Team
+                ExposedDropdownMenuBox(
+                    expanded = expandedHome,
+                    onExpandedChange = { expandedHome = !expandedHome }
+                ) {
+                    OutlinedTextField(
+                        value = homeTeam.name,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Equipo Local") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedHome) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedHome,
+                        onDismissRequest = { expandedHome = false }
+                    ) {
+                        allTeams.forEach { t ->
+                            DropdownMenuItem(
+                                text = { Text(t.name) },
+                                onClick = {
+                                    homeTeam = t
+                                    expandedHome = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Away Team
+                ExposedDropdownMenuBox(
+                    expanded = expandedAway,
+                    onExpandedChange = { expandedAway = !expandedAway }
+                ) {
+                    OutlinedTextField(
+                        value = awayTeam.name,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Equipo Visitante") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAway) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedAway,
+                        onDismissRequest = { expandedAway = false }
+                    ) {
+                        allTeams.forEach { t ->
+                            DropdownMenuItem(
+                                text = { Text(t.name) },
+                                onClick = {
+                                    awayTeam = t
+                                    expandedAway = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = durationText,
+                    onValueChange = { input ->
+                        val filtered = input.filter { it.isDigit() }
+                        durationText = filtered
+                    },
+                    label = { Text("Duración (minutos)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val duration = durationText.toIntOrNull() ?: 20
+                    onConfirm(homeTeam.id, awayTeam.id, duration)
+                },
+                enabled = homeTeam.id != awayTeam.id,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+            ) {
+                Text("Comenzar Partido")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
         }
     )
 }

@@ -28,6 +28,13 @@ data class UserFeedbackReport(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+data class DevTicketMessage(
+    val id: Long = System.currentTimeMillis(),
+    val sender: String, // "USER" or "DANIEL"
+    val text: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 class SettingsViewModel(
     private val repository: TheBiGRepository,
     private val context: Context
@@ -44,6 +51,10 @@ class SettingsViewModel(
     // Performance Saving Mode: "Descargar/Optimizar Animaciones"
     private val _isPowerSavingMode = MutableStateFlow(prefs.getBoolean("power_saving_mode", false))
     val isPowerSavingMode: StateFlow<Boolean> = _isPowerSavingMode.asStateFlow()
+
+    // Master switch for push notifications (default disabled)
+    private val _isPushNotificationsEnabled = MutableStateFlow(prefs.getBoolean("push_notifications_master", false))
+    val isPushNotificationsEnabled: StateFlow<Boolean> = _isPushNotificationsEnabled.asStateFlow()
 
     // Hidden Developer Mode APK URL
     private val _apkDownloadUrl = MutableStateFlow(
@@ -62,6 +73,10 @@ class SettingsViewModel(
     // Internal Feedback Reports
     private val _feedbackReports = MutableStateFlow<List<UserFeedbackReport>>(loadFeedbacks())
     val feedbackReports: StateFlow<List<UserFeedbackReport>> = _feedbackReports.asStateFlow()
+
+    // Developer Chat / Ticket Messages
+    private val _ticketMessages = MutableStateFlow<List<DevTicketMessage>>(loadTicketMessages())
+    val ticketMessages: StateFlow<List<DevTicketMessage>> = _ticketMessages.asStateFlow()
 
     fun acceptOnboarding() {
         prefs.edit().putBoolean("onboarding_accepted", true).apply()
@@ -90,6 +105,31 @@ class SettingsViewModel(
 
     fun dismissBroadcast() {
         _activeBroadcast.value = null
+    }
+
+    fun togglePushNotifications(enabled: Boolean) {
+        prefs.edit().putBoolean("push_notifications_master", enabled).apply()
+        _isPushNotificationsEnabled.value = enabled
+    }
+
+    fun sendTicketMessage(text: String) {
+        if (text.isBlank()) return
+        val userMsg = DevTicketMessage(
+            sender = "USER",
+            text = text.trim()
+        )
+        val current = _ticketMessages.value.toMutableList()
+        current.add(userMsg)
+
+        // Automated helpful acknowledgement from Daniel
+        val devReply = DevTicketMessage(
+            sender = "DANIEL",
+            text = "¡Hola! Gracias por escribir al soporte técnico de TheBiG. Daniel ha recibido tu ticket y revisará los registros del sistema."
+        )
+        current.add(devReply)
+
+        _ticketMessages.value = current
+        saveTicketMessages(current)
     }
 
     fun submitFeedback(type: String, subject: String, description: String) {
@@ -170,6 +210,46 @@ class SettingsViewModel(
                 arr.put(obj)
             }
             prefs.edit().putString("user_feedbacks", arr.toString()).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun loadTicketMessages(): List<DevTicketMessage> {
+        val raw = prefs.getString("dev_ticket_messages", null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            val list = mutableListOf<DevTicketMessage>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(
+                    DevTicketMessage(
+                        id = obj.optLong("id", System.currentTimeMillis()),
+                        sender = obj.getString("sender"),
+                        text = obj.getString("text"),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                    )
+                )
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveTicketMessages(messages: List<DevTicketMessage>) {
+        try {
+            val arr = JSONArray()
+            for (m in messages) {
+                val obj = JSONObject().apply {
+                    put("id", m.id)
+                    put("sender", m.sender)
+                    put("text", m.text)
+                    put("timestamp", m.timestamp)
+                }
+                arr.put(obj)
+            }
+            prefs.edit().putString("dev_ticket_messages", arr.toString()).apply()
         } catch (e: Exception) {
             e.printStackTrace()
         }

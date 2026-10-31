@@ -35,6 +35,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -94,6 +95,7 @@ fun ChampionPhotoStudioScreen(
     var players by remember { mutableStateOf(teamPlayers) }
     var customPhotoBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isEnhancedWithAi by remember { mutableStateOf(false) }
+    var selectedDesignMode by remember { mutableStateOf(GraphicCardGenerator.ChampionDesignMode.CENTERED_CONTAINED) }
     var generatedCardBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isGenerating by remember { mutableStateOf(false) }
 
@@ -126,7 +128,7 @@ fun ChampionPhotoStudioScreen(
     }
 
     // Recompute generated bitmap on Dispatchers.IO when dependencies change
-    LaunchedEffect(players, customPhotoBitmap, isEnhancedWithAi) {
+    LaunchedEffect(players, customPhotoBitmap, isEnhancedWithAi, selectedDesignMode) {
         isGenerating = true
         withContext(Dispatchers.IO) {
             val photoToUse = if (isEnhancedWithAi && customPhotoBitmap != null) {
@@ -139,7 +141,8 @@ fun ChampionPhotoStudioScreen(
                 tournament = tournament,
                 championTeam = championTeam,
                 players = players,
-                customPhoto = photoToUse
+                customPhoto = photoToUse,
+                designMode = selectedDesignMode
             )
             withContext(Dispatchers.Main) {
                 generatedCardBitmap = card
@@ -262,6 +265,28 @@ fun ChampionPhotoStudioScreen(
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    Text("Modo de Diseño del Cuadro:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedDesignMode == GraphicCardGenerator.ChampionDesignMode.CENTERED_CONTAINED,
+                            onClick = { selectedDesignMode = GraphicCardGenerator.ChampionDesignMode.CENTERED_CONTAINED },
+                            label = { Text("Centrado", fontSize = 11.sp) }
+                        )
+                        FilterChip(
+                            selected = selectedDesignMode == GraphicCardGenerator.ChampionDesignMode.SPLIT_HALF,
+                            onClick = { selectedDesignMode = GraphicCardGenerator.ChampionDesignMode.SPLIT_HALF },
+                            label = { Text("Dividido 1:1", fontSize = 11.sp) }
+                        )
+                        FilterChip(
+                            selected = selectedDesignMode == GraphicCardGenerator.ChampionDesignMode.FULL_BACKGROUND,
+                            onClick = { selectedDesignMode = GraphicCardGenerator.ChampionDesignMode.FULL_BACKGROUND },
+                            label = { Text("Fondo Total", fontSize = 11.sp) }
+                        )
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),

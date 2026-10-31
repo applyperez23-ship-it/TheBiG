@@ -557,6 +557,7 @@ private fun EditTeamDialog(
         "#10B981", "#F97316", "#06B6D4", "#EC4899", "#EAB308", "#1E293B", "#8B5CF6"
     )
 
+    var shieldPrimaryColor by remember { mutableStateOf(team.shieldPrimaryColorHex) }
     var primaryColor by remember { mutableStateOf(team.primaryColorHex) }
     var secondaryColor by remember { mutableStateOf(team.secondaryColorHex) }
     var borderColor by remember { mutableStateOf(team.borderColorHex) }
@@ -589,7 +590,7 @@ private fun EditTeamDialog(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             TeamCrestView(
                                 shieldIndex = selectedShieldIdx,
-                                primaryColorHex = primaryColor,
+                                primaryColorHex = shieldPrimaryColor,
                                 secondaryColorHex = secondaryColor,
                                 borderColorHex = borderColor,
                                 shortName = if (shortName.isNotBlank()) shortName else "BIG",
@@ -783,7 +784,8 @@ private fun EditTeamDialog(
                             secondaryColorHex = secondaryColor,
                             borderColorHex = borderColor,
                             jerseyPattern = jerseyPattern,
-                            goalkeeperColorHex = goalkeeperColor
+                            goalkeeperColorHex = goalkeeperColor,
+                            shieldPrimaryColorHex = shieldPrimaryColor
                         )
                     )
                 }

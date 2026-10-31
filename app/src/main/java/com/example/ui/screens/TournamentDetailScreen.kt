@@ -804,9 +804,13 @@ private fun IsolatedFinancesTabContent(
     onUpdatePrizes: (champion: Double, runnerUp: Double, scorer: Double, bestGk: Double) -> Unit
 ) {
     val totalTeams = enrolledTeams.size
-    val totalCollected = tournament.entryFee * totalTeams
+    val totalCollected = if (tournament.financialModel == "BY_PLAYER") {
+        PrizeCalculator.roundToTen(tournament.feePerPlayer * (tournament.playersPerTeam.coerceAtLeast(1)) * totalTeams)
+    } else {
+        PrizeCalculator.roundToTen((if (tournament.totalTeamFee > 0) tournament.totalTeamFee else tournament.entryFee) * totalTeams)
+    }
 
-    // Sliders for dynamic 100% rebalancing
+    // Sliders for dynamic 100% hierarchical rebalancing (Campeón >= Subcampeón >= Resto)
     var percentages by remember(tournament) {
         val total = (tournament.prizeChampionAmount + tournament.prizeRunnerUpAmount + tournament.prizeTopScorerAmount + tournament.prizeBestGkAmount).coerceAtLeast(1.0)
         mutableStateOf<Map<PrizeCategory, Float>>(
@@ -840,14 +844,19 @@ private fun IsolatedFinancesTabContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("POZO TOTAL DE PREMIOS", color = Color(0xFFF59E0B), fontWeight = FontWeight.Black, fontSize = 11.sp)
-                    Text("$totalTeams Clubes × $${tournament.entryFee.toInt()}", fontSize = 12.sp)
+                    Text("POZO TOTAL DE PREMIOS (REDONDEO A 10)", color = Color(0xFFF59E0B), fontWeight = FontWeight.Black, fontSize = 11.sp)
+                    val feeDesc = if (tournament.financialModel == "BY_PLAYER") {
+                        "$totalTeams Clubes × ($${tournament.feePerPlayer.toInt()} × ${tournament.playersPerTeam} jug)"
+                    } else {
+                        "$totalTeams Clubes × $${(if (tournament.totalTeamFee > 0) tournament.totalTeamFee else tournament.entryFee).toInt()}"
+                    }
+                    Text(feeDesc, fontSize = 12.sp)
                 }
-                Text("$${"%.2f".format(totalCollected)}", fontWeight = FontWeight.Black, fontSize = 22.sp, color = Color(0xFFF59E0B))
+                Text("$${"%.0f".format(totalCollected)}", fontWeight = FontWeight.Black, fontSize = 22.sp, color = Color(0xFFF59E0B))
             }
         }
 
-        // Proportional Auto-balancing Sliders (Sum = 100%)
+        // Proportional Hierarchical Auto-balancing Sliders (Sum = 100%, Campeón >= Subcampeón)
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
@@ -860,14 +869,14 @@ private fun IsolatedFinancesTabContent(
                 PrizeSliderRow(
                     label = "Campeón",
                     percentage = percentages[PrizeCategory.CHAMPION] ?: 50f,
-                    amount = totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 50f).toDouble() / 100.0),
+                    amount = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 50f).toDouble() / 100.0)),
                     color = Color(0xFF10B981),
                     onValueChange = { newVal ->
-                        percentages = PrizeCalculator.rebalancePercentages(PrizeCategory.CHAMPION, newVal, percentages)
-                        val ch = totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 0f).toDouble() / 100.0)
-                        val ru = totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 0f).toDouble() / 100.0)
-                        val sc = totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 0f).toDouble() / 100.0)
-                        val gk = totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 0f).toDouble() / 100.0)
+                        percentages = PrizeCalculator.rebalanceHierarchicalPercentages(PrizeCategory.CHAMPION, newVal, percentages)
+                        val ch = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 0f).toDouble() / 100.0))
+                        val ru = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 0f).toDouble() / 100.0))
+                        val sc = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 0f).toDouble() / 100.0))
+                        val gk = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 0f).toDouble() / 100.0))
                         onUpdatePrizes(ch, ru, sc, gk)
                     }
                 )
@@ -876,14 +885,14 @@ private fun IsolatedFinancesTabContent(
                 PrizeSliderRow(
                     label = "Subcampeón",
                     percentage = percentages[PrizeCategory.RUNNER_UP] ?: 25f,
-                    amount = totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 25f).toDouble() / 100.0),
+                    amount = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 25f).toDouble() / 100.0)),
                     color = Color(0xFF3B82F6),
                     onValueChange = { newVal ->
-                        percentages = PrizeCalculator.rebalancePercentages(PrizeCategory.RUNNER_UP, newVal, percentages)
-                        val ch = totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 0f).toDouble() / 100.0)
-                        val ru = totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 0f).toDouble() / 100.0)
-                        val sc = totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 0f).toDouble() / 100.0)
-                        val gk = totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 0f).toDouble() / 100.0)
+                        percentages = PrizeCalculator.rebalanceHierarchicalPercentages(PrizeCategory.RUNNER_UP, newVal, percentages)
+                        val ch = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 0f).toDouble() / 100.0))
+                        val ru = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 0f).toDouble() / 100.0))
+                        val sc = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 0f).toDouble() / 100.0))
+                        val gk = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 0f).toDouble() / 100.0))
                         onUpdatePrizes(ch, ru, sc, gk)
                     }
                 )
@@ -892,14 +901,14 @@ private fun IsolatedFinancesTabContent(
                 PrizeSliderRow(
                     label = "Goleador",
                     percentage = percentages[PrizeCategory.TOP_SCORER] ?: 15f,
-                    amount = totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 15f).toDouble() / 100.0),
+                    amount = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 15f).toDouble() / 100.0)),
                     color = Color(0xFFEC4899),
                     onValueChange = { newVal ->
-                        percentages = PrizeCalculator.rebalancePercentages(PrizeCategory.TOP_SCORER, newVal, percentages)
-                        val ch = totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 0f).toDouble() / 100.0)
-                        val ru = totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 0f).toDouble() / 100.0)
-                        val sc = totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 0f).toDouble() / 100.0)
-                        val gk = totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 0f).toDouble() / 100.0)
+                        percentages = PrizeCalculator.rebalanceHierarchicalPercentages(PrizeCategory.TOP_SCORER, newVal, percentages)
+                        val ch = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 0f).toDouble() / 100.0))
+                        val ru = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 0f).toDouble() / 100.0))
+                        val sc = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 0f).toDouble() / 100.0))
+                        val gk = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 0f).toDouble() / 100.0))
                         onUpdatePrizes(ch, ru, sc, gk)
                     }
                 )
@@ -908,14 +917,14 @@ private fun IsolatedFinancesTabContent(
                 PrizeSliderRow(
                     label = "Valla Menos Vencida",
                     percentage = percentages[PrizeCategory.BEST_GK] ?: 10f,
-                    amount = totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 10f).toDouble() / 100.0),
+                    amount = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 10f).toDouble() / 100.0)),
                     color = Color(0xFFF59E0B),
                     onValueChange = { newVal ->
-                        percentages = PrizeCalculator.rebalancePercentages(PrizeCategory.BEST_GK, newVal, percentages)
-                        val ch = totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 0f).toDouble() / 100.0)
-                        val ru = totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 0f).toDouble() / 100.0)
-                        val sc = totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 0f).toDouble() / 100.0)
-                        val gk = totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 0f).toDouble() / 100.0)
+                        percentages = PrizeCalculator.rebalanceHierarchicalPercentages(PrizeCategory.BEST_GK, newVal, percentages)
+                        val ch = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.CHAMPION] ?: 0f).toDouble() / 100.0))
+                        val ru = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.RUNNER_UP] ?: 0f).toDouble() / 100.0))
+                        val sc = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.TOP_SCORER] ?: 0f).toDouble() / 100.0))
+                        val gk = PrizeCalculator.roundToTen(totalCollected * ((percentages[PrizeCategory.BEST_GK] ?: 0f).toDouble() / 100.0))
                         onUpdatePrizes(ch, ru, sc, gk)
                     }
                 )

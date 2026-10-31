@@ -63,37 +63,43 @@ object PrizeCalculator {
         val paidCount = crossRefs.count { it.feePaid }
         val pendingCount = enrolledCount - paidCount
 
-        val fee = tournament.entryFee
-        val estimatedRev = enrolledCount * fee
-        val actualRev = paidCount * fee
-        val pendingRev = pendingCount * fee
+        val feePerTeam = tournament.totalTeamFee
+        val feePerPlayer = tournament.feePerPlayer
+
+        val estimatedRev = roundToTen(enrolledCount * feePerTeam)
+        val actualRev = roundToTen(paidCount * feePerTeam)
+        val pendingRev = roundToTen(pendingCount * feePerTeam)
 
         // Group players by team to automate roster-based calculations
         val playersByTeam = players.groupBy { it.teamId }
         val teamQuotasMap = crossRefs.associate { cr ->
             val teamPlayers = playersByTeam[cr.teamId] ?: emptyList()
             val rCount = teamPlayers.size
-            val effectivePerPlayer = if (rCount > 0) {
-                fee / rCount
+            val effectivePerPlayer = if (tournament.financialModel == "BY_PLAYER") {
+                tournament.entryFee
+            } else if (rCount > 0) {
+                feePerTeam / rCount
             } else if (tournament.playersPerTeam > 0) {
-                fee / tournament.playersPerTeam
+                feePerTeam / tournament.playersPerTeam
             } else {
                 0.0
             }
             cr.teamId to TeamQuotaInfo(
                 teamId = cr.teamId,
                 rosterCount = rCount,
-                feePerPlayer = effectivePerPlayer,
-                totalTeamFee = fee,
+                feePerPlayer = roundToTen(effectivePerPlayer),
+                totalTeamFee = roundToTen(feePerTeam),
                 feePaid = cr.feePaid
             )
         }
 
         val totalRoster = players.count { p -> crossRefs.any { it.teamId == p.teamId } }
-        val avgFeePerPlayer = if (totalRoster > 0) {
-            estimatedRev / totalRoster
+        val avgFeePerPlayer = if (tournament.financialModel == "BY_PLAYER") {
+            roundToTen(tournament.entryFee)
+        } else if (totalRoster > 0) {
+            roundToTen(estimatedRev / totalRoster)
         } else if (tournament.playersPerTeam > 0) {
-            fee / tournament.playersPerTeam
+            roundToTen(feePerTeam / tournament.playersPerTeam)
         } else {
             0.0
         }
@@ -101,12 +107,12 @@ object PrizeCalculator {
         // Sanctions Pool calculation
         val yellowCount = events.count { it.eventType == "YELLOW_CARD" }
         val redCount = events.count { it.eventType == "RED_CARD" }
-        val yellowFineTotal = yellowCount * tournament.yellowCardFine
-        val redFineTotal = redCount * tournament.redCardFine
-        val sanctionsPoolTotal = yellowFineTotal + redFineTotal
+        val yellowFineTotal = roundToTen(yellowCount * tournament.yellowCardFine)
+        val redFineTotal = roundToTen(redCount * tournament.redCardFine)
+        val sanctionsPoolTotal = roundToTen(yellowFineTotal + redFineTotal)
 
         val mvpPrize = if (tournament.prizeMvpEnabled) {
-            if (tournament.prizeMvpAmount > 0) tournament.prizeMvpAmount else sanctionsPoolTotal
+            if (tournament.prizeMvpAmount > 0) roundToTen(tournament.prizeMvpAmount) else sanctionsPoolTotal
         } else 0.0
 
         val prizeList = listOf(
@@ -114,35 +120,35 @@ object PrizeCalculator {
                 id = "champion",
                 name = "Campeón",
                 enabled = tournament.prizeChampionEnabled,
-                amount = if (tournament.prizeChampionEnabled) tournament.prizeChampionAmount else 0.0,
+                amount = if (tournament.prizeChampionEnabled) roundToTen(tournament.prizeChampionAmount) else 0.0,
                 winnerNote = "Equipo campeón del torneo"
             ),
             PrizeItem(
                 id = "runner_up",
                 name = "Subcampeón",
                 enabled = tournament.prizeRunnerUpEnabled,
-                amount = if (tournament.prizeRunnerUpEnabled) tournament.prizeRunnerUpAmount else 0.0,
+                amount = if (tournament.prizeRunnerUpEnabled) roundToTen(tournament.prizeRunnerUpAmount) else 0.0,
                 winnerNote = "Equipo subcampeón del torneo"
             ),
             PrizeItem(
                 id = "top_scorer",
                 name = "Máximo Goleador (Pichichi)",
                 enabled = tournament.prizeTopScorerEnabled,
-                amount = if (tournament.prizeTopScorerEnabled) tournament.prizeTopScorerAmount else 0.0,
+                amount = if (tournament.prizeTopScorerEnabled) roundToTen(tournament.prizeTopScorerAmount) else 0.0,
                 winnerNote = "Aplica a cualquier jugador registrado aunque su equipo haya sido eliminado"
             ),
             PrizeItem(
                 id = "top_assister",
                 name = "Máximo Asistidor",
                 enabled = tournament.prizeTopAssisterEnabled,
-                amount = if (tournament.prizeTopAssisterEnabled) tournament.prizeTopAssisterAmount else 0.0,
+                amount = if (tournament.prizeTopAssisterEnabled) roundToTen(tournament.prizeTopAssisterAmount) else 0.0,
                 winnerNote = "Aplica a cualquier jugador registrado aunque su equipo haya sido eliminado"
             ),
             PrizeItem(
                 id = "best_gk",
                 name = "Mejor Portero (Valla Menos Vencida)",
                 enabled = tournament.prizeBestGkEnabled,
-                amount = if (tournament.prizeBestGkEnabled) tournament.prizeBestGkAmount else 0.0,
+                amount = if (tournament.prizeBestGkEnabled) roundToTen(tournament.prizeBestGkAmount) else 0.0,
                 winnerNote = "Regla de Justicia del Portero (mínimo ${tournament.minMatchesForBestGk} partidos en portería)"
             ),
             PrizeItem(
@@ -154,12 +160,12 @@ object PrizeCalculator {
             )
         )
 
-        val totalPrizes = prizeList.sumOf { it.amount }
-        val estimatedNet = estimatedRev + sanctionsPoolTotal - totalPrizes
-        val actualNet = actualRev + sanctionsPoolTotal - totalPrizes
+        val totalPrizes = roundToTen(prizeList.sumOf { it.amount })
+        val estimatedNet = roundToTen(estimatedRev + sanctionsPoolTotal - totalPrizes)
+        val actualNet = roundToTen(actualRev + sanctionsPoolTotal - totalPrizes)
 
         return TournamentFinancialSummary(
-            entryFee = fee,
+            entryFee = roundToTen(tournament.entryFee),
             feePerPlayer = avgFeePerPlayer,
             enrolledTeamsCount = enrolledCount,
             paidTeamsCount = paidCount,
@@ -184,46 +190,88 @@ object PrizeCalculator {
     }
 
     /**
-     * Rebalances percentages dynamically so the sum of all categories ALWAYS equals exactly 100%.
-     * When one percentage changes, the remaining percentage (100 - newValue) is proportionally
-     * distributed among the remaining categories.
+     * Strictly rounds monetary amounts to nearest multiples of 10 (e.g. 2004.24 -> 2000.0)
      */
-    fun rebalancePercentages(
-        changedCategory: String,
-        newValue: Double,
-        currentMap: Map<String, Double>
-    ): Map<String, Double> {
-        val clampedNew = newValue.coerceIn(0.0, 100.0)
-        val remainingBudget = 100.0 - clampedNew
-        val otherKeys = currentMap.keys.filter { it != changedCategory }
+    fun roundToTen(amount: Double): Double {
+        return (Math.round(amount / 10.0) * 10.0)
+    }
 
-        if (otherKeys.isEmpty()) {
-            return mapOf(changedCategory to 100.0)
-        }
+    /**
+     * Rebalances percentages dynamically enforcing hierarchy:
+     * Campeón >= Subcampeón >= Resto.
+     * When adjusting secondary categories (Goleador, Mejor Portero), Campeón and Subcampeón
+     * remain fixed and are NOT altered.
+     */
+    fun rebalanceHierarchicalPercentages(
+        changedCategory: PrizeCategory,
+        newValue: Float,
+        currentMap: Map<PrizeCategory, Float>
+    ): Map<PrizeCategory, Float> {
+        val result = currentMap.toMutableMap()
+        val clampedVal = newValue.coerceIn(0f, 100f)
 
-        val otherSum = otherKeys.sumOf { currentMap[it] ?: 0.0 }
-        val result = mutableMapOf<String, Double>()
-        result[changedCategory] = clampedNew
-
-        if (otherSum > 0.001) {
-            var distributed = 0.0
-            otherKeys.forEachIndexed { index, key ->
-                if (index == otherKeys.lastIndex) {
-                    // Last item absorbs rounding difference so sum is strictly 100.0
-                    result[key] = (remainingBudget - distributed).coerceAtLeast(0.0)
+        when (changedCategory) {
+            PrizeCategory.CHAMPION -> {
+                result[PrizeCategory.CHAMPION] = clampedVal
+                // Ensure Subcampeón does not exceed Campeón
+                val currentRu = result[PrizeCategory.RUNNER_UP] ?: 25f
+                if (currentRu > clampedVal) {
+                    result[PrizeCategory.RUNNER_UP] = clampedVal
+                }
+                // Distribute remaining budget among others
+                val locked = (result[PrizeCategory.CHAMPION] ?: 0f) + (result[PrizeCategory.RUNNER_UP] ?: 0f)
+                val remaining = (100f - locked).coerceAtLeast(0f)
+                val secondaries = listOf(PrizeCategory.TOP_SCORER, PrizeCategory.BEST_GK)
+                val secSum = secondaries.sumOf { (result[it] ?: 0f).toDouble() }.toFloat()
+                if (secSum > 0f) {
+                    secondaries.forEach {
+                        val ratio = (result[it] ?: 0f) / secSum
+                        result[it] = (remaining * ratio)
+                    }
                 } else {
-                    val ratio = (currentMap[key] ?: 0.0) / otherSum
-                    val allocation = Math.round(remainingBudget * ratio * 10.0) / 10.0
-                    result[key] = allocation.coerceAtLeast(0.0)
-                    distributed += allocation
+                    val half = remaining / 2f
+                    secondaries.forEach { result[it] = half }
                 }
             }
-        } else {
-            // Equal distribution if others were 0
-            val perItem = remainingBudget / otherKeys.size
-            otherKeys.forEach { key ->
-                result[key] = perItem
+            PrizeCategory.RUNNER_UP -> {
+                val champVal = result[PrizeCategory.CHAMPION] ?: 50f
+                // Subcampeón cannot exceed Campeón
+                val ruVal = clampedVal.coerceAtMost(champVal)
+                result[PrizeCategory.RUNNER_UP] = ruVal
+                val locked = champVal + ruVal
+                val remaining = (100f - locked).coerceAtLeast(0f)
+                val secondaries = listOf(PrizeCategory.TOP_SCORER, PrizeCategory.BEST_GK)
+                val secSum = secondaries.sumOf { (result[it] ?: 0f).toDouble() }.toFloat()
+                if (secSum > 0f) {
+                    secondaries.forEach {
+                        val ratio = (result[it] ?: 0f) / secSum
+                        result[it] = (remaining * ratio)
+                    }
+                } else {
+                    val half = remaining / 2f
+                    secondaries.forEach { result[it] = half }
+                }
             }
+            PrizeCategory.TOP_SCORER, PrizeCategory.BEST_GK -> {
+                // Secondary slider: Campeón and Subcampeón remain locked!
+                val champVal = result[PrizeCategory.CHAMPION] ?: 50f
+                val ruVal = result[PrizeCategory.RUNNER_UP] ?: 25f
+                val budgetForSecondaries = (100f - (champVal + ruVal)).coerceAtLeast(0f)
+                val otherSecondary = if (changedCategory == PrizeCategory.TOP_SCORER) PrizeCategory.BEST_GK else PrizeCategory.TOP_SCORER
+
+                // Clamped so secondary cannot exceed Subcampeón or available budget
+                val finalChanged = clampedVal.coerceIn(0f, budgetForSecondaries.coerceAtMost(ruVal))
+                result[changedCategory] = finalChanged
+                result[otherSecondary] = (budgetForSecondaries - finalChanged).coerceAtLeast(0f)
+            }
+        }
+
+        // Final normalization to ensure strict 100.0% sum
+        val sum = result.values.sum()
+        if (Math.abs(sum - 100f) > 0.01f) {
+            val lastKey = PrizeCategory.BEST_GK
+            val others = result.keys.filter { it != lastKey }.sumOf { (result[it] ?: 0f).toDouble() }.toFloat()
+            result[lastKey] = (100f - others).coerceAtLeast(0f)
         }
 
         return result
@@ -234,10 +282,6 @@ object PrizeCalculator {
         newValue: Float,
         currentMap: Map<PrizeCategory, Float>
     ): Map<PrizeCategory, Float> {
-        val stringMap = currentMap.mapKeys { it.key.id }.mapValues { it.value.toDouble() }
-        val rebalanced = rebalancePercentages(changedCategory.id, newValue.toDouble(), stringMap)
-        return PrizeCategory.values().associateWith { cat ->
-            (rebalanced[cat.id] ?: 0.0).toFloat()
-        }
+        return rebalanceHierarchicalPercentages(changedCategory, newValue, currentMap)
     }
 }

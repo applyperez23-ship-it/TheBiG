@@ -59,7 +59,8 @@ class TournamentViewModel(private val repository: TheBiGRepository) : ViewModel(
         prizeMvp: Double = 0.0,
         yellowCardFine: Double = 5.0,
         redCardFine: Double = 10.0,
-        minMatchesGk: Int = 2
+        minMatchesGk: Int = 2,
+        financialModel: String = "BY_TEAM"
     ): Long {
         val t = Tournament(
             name = name.trim(),
@@ -83,7 +84,8 @@ class TournamentViewModel(private val repository: TheBiGRepository) : ViewModel(
             prizeMvpAmount = prizeMvp,
             yellowCardFine = yellowCardFine,
             redCardFine = redCardFine,
-            minMatchesForBestGk = minMatchesGk
+            minMatchesForBestGk = minMatchesGk,
+            financialModel = financialModel
         )
         return repository.saveTournament(t)
     }

@@ -158,8 +158,11 @@ fun ShieldEditorDialog(
                         .clip(RoundedCornerShape(14.dp))
                         .border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
                 ) {
+                    var renderTrigger by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+
                     // Checkered pattern indicating transparency
                     Canvas(modifier = Modifier.fillMaxSize()) {
+                        val dummy = renderTrigger
                         canvasSize = IntSize(size.width.toInt(), size.height.toInt())
                         val checkSize = 16.dp.toPx()
                         val cols = (size.width / checkSize).toInt() + 1
@@ -191,12 +194,26 @@ fun ShieldEditorDialog(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(selectedTool, brushRadius, currentBitmap) {
+                            .pointerInput(selectedTool, brushRadius) {
                                 detectDragGestures(
                                     onDragStart = { offset ->
                                         pushUndo()
                                         lastTouchX = offset.x
                                         lastTouchY = offset.y
+                                        if (canvasSize.width > 0 && canvasSize.height > 0) {
+                                            val bmpX = (offset.x / canvasSize.width) * currentBitmap.width
+                                            val bmpY = (offset.y / canvasSize.height) * currentBitmap.height
+                                            val scaledRadius = (brushRadius / canvasSize.width) * currentBitmap.width
+                                            OfflineShieldRemover.applyBrush(
+                                                bitmap = currentBitmap,
+                                                x = bmpX,
+                                                y = bmpY,
+                                                radius = scaledRadius.coerceAtLeast(2f),
+                                                isErase = selectedTool == "ERASER",
+                                                paintColor = AndroidColor.WHITE
+                                            )
+                                            renderTrigger++
+                                        }
                                     },
                                     onDragEnd = {
                                         lastTouchX = -1f
@@ -231,7 +248,7 @@ fun ShieldEditorDialog(
 
                                             lastTouchX = touchX
                                             lastTouchY = touchY
-                                            currentBitmap = currentBitmap.copy(Bitmap.Config.ARGB_8888, true)
+                                            renderTrigger++
                                         }
                                     }
                                 )

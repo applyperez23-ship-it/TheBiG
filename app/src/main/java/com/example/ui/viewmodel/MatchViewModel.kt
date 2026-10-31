@@ -205,6 +205,26 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
         }
     }
 
+    fun declareForfeit(context: Context, matchId: Long, winnerTeamId: Long) {
+        viewModelScope.launch {
+            val m = repository.getMatchOnce(matchId) ?: return@launch
+            val homeScore = if (winnerTeamId == m.homeTeamId) 3 else 0
+            val awayScore = if (winnerTeamId == m.awayTeamId) 3 else 0
+            repository.updateMatch(
+                m.copy(
+                    homeScore = homeScore,
+                    awayScore = awayScore,
+                    status = "FINISHED",
+                    elapsedSeconds = 0
+                )
+            )
+            val intent = Intent(context, MatchTimerService::class.java).apply {
+                action = MatchTimerService.ACTION_STOP
+            }
+            context.startService(intent)
+        }
+    }
+
     fun deleteEvent(event: MatchEvent) {
         viewModelScope.launch {
             repository.deleteMatchEvent(event)

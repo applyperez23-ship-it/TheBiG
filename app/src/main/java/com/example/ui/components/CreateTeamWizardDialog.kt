@@ -108,7 +108,8 @@ fun CreateTeamWizardDialog(
         customShieldUri: String?,
         jerseyPattern: String,
         goalkeeperColorHex: String,
-        roster: List<DraftPlayer>
+        roster: List<DraftPlayer>,
+        shieldPrimaryColorHex: String
     ) -> Unit
 ) {
     val context = LocalContext.current
@@ -123,6 +124,7 @@ fun CreateTeamWizardDialog(
     var rawGalleryBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var showShieldEditor by remember { mutableStateOf(false) }
 
+    var shieldPrimaryColor by remember { mutableStateOf("#F59E0B") } // Dedicated vector crest color
     var primaryColor by remember { mutableStateOf("#0284C7") }
     var secondaryColor by remember { mutableStateOf("#0F172A") }
     var borderColor by remember { mutableStateOf("#FFFFFF") }
@@ -241,14 +243,14 @@ fun CreateTeamWizardDialog(
                                     .verticalScroll(rememberScrollState()),
                                 verticalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
-                                // Live Crest Preview
+                                 // Live Crest Preview
                                 Box(
                                     modifier = Modifier.fillMaxWidth(),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     TeamCrestView(
                                         shieldIndex = selectedShieldIdx,
-                                        primaryColorHex = primaryColor,
+                                        primaryColorHex = shieldPrimaryColor,
                                         secondaryColorHex = secondaryColor,
                                         borderColorHex = borderColor,
                                         shortName = if (shortName.isNotBlank()) shortName else name.take(3),
@@ -269,8 +271,8 @@ fun CreateTeamWizardDialog(
 
                                 OutlinedTextField(
                                     value = shortName,
-                                    onValueChange = { if (it.length <= 4) shortName = it.uppercase() },
-                                    label = { Text("Siglas (ej: RMA, BAR, FCB)") },
+                                    onValueChange = { if (it.length <= 3) shortName = it.uppercase() },
+                                    label = { Text("Monograma / Siglas (hasta 3 letras)") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -309,7 +311,7 @@ fun CreateTeamWizardDialog(
                                 }
 
                                 Text(
-                                    text = "O elige un Escudo Vectorial:",
+                                    text = "10 Diseños de Heráldica Vectorial:",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -346,11 +348,50 @@ fun CreateTeamWizardDialog(
                                                 ) {
                                                     TeamCrestView(
                                                         shieldIndex = idx,
-                                                        primaryColorHex = primaryColor,
+                                                        primaryColorHex = shieldPrimaryColor,
                                                         secondaryColorHex = secondaryColor,
                                                         borderColorHex = borderColor,
                                                         shortName = "",
                                                         size = 40.dp
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Dedicated vector shield color picker
+                                if (shieldMode == "PRESET") {
+                                    Text(
+                                        text = "Color del Escudo Vectorial:",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        val crestColors = listOf(
+                                            "#F59E0B", "#EF4444", "#3B82F6", "#10B981", "#8B5CF6",
+                                            "#06B6D4", "#EC4899", "#FFFFFF", "#0F172A", "#64748B"
+                                        )
+                                        items(crestColors) { hex ->
+                                            val isColorSel = shieldPrimaryColor.equals(hex, ignoreCase = true)
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(32.dp)
+                                                    .background(Color(android.graphics.Color.parseColor(hex)), CircleShape)
+                                                    .border(
+                                                        width = if (isColorSel) 2.5.dp else 1.dp,
+                                                        color = if (isColorSel) MaterialTheme.colorScheme.primary else Color.Gray,
+                                                        shape = CircleShape
+                                                    )
+                                                    .clickable { shieldPrimaryColor = hex },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (isColorSel) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = if (hex == "#FFFFFF") Color.Black else Color.White
                                                     )
                                                 }
                                             }
@@ -648,7 +689,8 @@ fun CreateTeamWizardDialog(
                                     if (shieldMode == "GALLERY") customShieldUri else null,
                                     jerseyPattern,
                                     goalkeeperColor,
-                                    roster.toList()
+                                    roster.toList(),
+                                    shieldPrimaryColor
                                 )
                             },
                             enabled = name.isNotBlank(),

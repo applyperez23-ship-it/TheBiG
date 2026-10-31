@@ -118,6 +118,8 @@ fun SettingsScreen(
     var showImportDialog by remember { mutableStateOf(false) }
     var exportedTbText by remember { mutableStateOf("") }
     var importTbText by remember { mutableStateOf("") }
+    var showConflictDialog by remember { mutableStateOf(false) }
+    var conflictingNames by remember { mutableStateOf<List<String>>(emptyList()) }
     var showBroadcastSimulatorDialog by remember { mutableStateOf(false) }
     var showEditUrlDialog by remember { mutableStateOf(false) }
     var showUpdateCheckDialog by remember { mutableStateOf(false) }
@@ -205,7 +207,7 @@ fun SettingsScreen(
                                 .padding(vertical = 2.dp)
                         ) {
                             Text(
-                                text = "Versión Oficial v1.3 (Build 2026)",
+                                text = "TheBiG v1.7 • Creado por Daniel el grande",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
@@ -376,6 +378,56 @@ fun SettingsScreen(
                 }
             }
 
+            // Push Notifications Master Switch (Default Off)
+            val pushEnabled by viewModel.isPushNotificationsEnabled.collectAsStateWithLifecycle()
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Notifications, contentDescription = null)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Notificaciones Push Globales",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = "Avisos de inicio, goles y fin de partidos (desactivado por defecto)",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = pushEnabled,
+                        onCheckedChange = { viewModel.togglePushNotifications(it) }
+                    )
+                }
+            }
+
             // Backup & Restore Database Section (Dedicated .tb File Format)
             Text(
                 text = "Copia de Seguridad y Restauración (.tb)",
@@ -415,7 +467,7 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Exportar .tb", fontSize = 12.sp)
                         }
@@ -428,7 +480,7 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Importar .tb", fontSize = 12.sp)
                         }
@@ -478,7 +530,7 @@ fun SettingsScreen(
                             fontSize = 14.sp
                         )
                         Text(
-                            text = "Versión instalada: v1.3.0 (Estable)",
+                            text = "Versión instalada: v1.7.0 (Estable)",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -755,10 +807,16 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         scope.launch {
-                            val success = TheBiGBackupHelper.importTbFileContent(context, TheBiGApp.instance.repository, importTbText)
-                            showImportDialog = false
-                            val msg = if (success) "Restauración .tb completada" else "Error al importar el paquete .tb"
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            val conflicts = TheBiGBackupHelper.checkConflicts(TheBiGApp.instance.repository, importTbText)
+                            if (conflicts.hasConflict) {
+                                conflictingNames = conflicts.duplicateTeamNames + conflicts.duplicateTournamentNames
+                                showConflictDialog = true
+                            } else {
+                                val success = TheBiGBackupHelper.importTbFileContent(context, TheBiGApp.instance.repository, importTbText, com.example.util.ConflictResolution.OVERWRITE)
+                                showImportDialog = false
+                                val msg = if (success) "Restauración .tb completada" else "Error al importar el paquete .tb"
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
                         }
                     },
                     enabled = importTbText.isNotBlank()
@@ -768,6 +826,71 @@ fun SettingsScreen(
             },
             dismissButton = {
                 OutlinedButton(onClick = { showImportDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Modal: Conflict Resolution Dialog (Sobrescribir vs Crear Copia)
+    if (showConflictDialog) {
+        AlertDialog(
+            onDismissRequest = { showConflictDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Conflicto de Nombres Detectado", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Los siguientes elementos ya existen en TheBiG:",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    conflictingNames.forEach { name ->
+                        Text("• $name", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "¿Deseas sobrescribir los datos existentes o crear un nuevo registro como copia con el sufijo ' (Copia)'?",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                val success = TheBiGBackupHelper.importTbFileContent(context, TheBiGApp.instance.repository, importTbText, com.example.util.ConflictResolution.CREATE_COPY)
+                                showConflictDialog = false
+                                showImportDialog = false
+                                Toast.makeText(context, if (success) "Importado creando copias" else "Error al importar", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    ) {
+                        Text("Crear Copia")
+                    }
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                val success = TheBiGBackupHelper.importTbFileContent(context, TheBiGApp.instance.repository, importTbText, com.example.util.ConflictResolution.OVERWRITE)
+                                showConflictDialog = false
+                                showImportDialog = false
+                                Toast.makeText(context, if (success) "Restaurado sobrescribiendo" else "Error al importar", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    ) {
+                        Text("Sobrescribir")
+                    }
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showConflictDialog = false }) {
                     Text("Cancelar")
                 }
             }
@@ -806,13 +929,13 @@ fun SettingsScreen(
                     } else {
                         Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(40.dp))
                         Text(
-                            text = "TheBiG está actualizado a la versión v1.3.0.",
+                            text = "TheBiG está actualizado a la versión v1.7.0.",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             textAlign = TextAlign.Center
                         )
                         Text(
-                            text = "Cuentas con el motor matemático de los 4 modos de torneo, formato .tb exclusivo, cronómetro oficial y editor de escudos fluido.",
+                            text = "Cuentas con el motor matemático de los 4 modos de torneo, formato .tb ZIP exclusivo, cronómetro de árbitro estático y editor de escudos con interpolación táctil.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center

@@ -16,7 +16,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -45,6 +49,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -81,6 +86,7 @@ import com.example.data.local.entity.Player
 import com.example.data.local.entity.Team
 import com.example.data.local.entity.Tournament
 import com.example.ui.components.DeleteConfirmationDialog
+import com.example.ui.components.KickoffAnimationOverlay
 import com.example.ui.viewmodel.MatchViewModel
 import com.example.util.TeamCrestView
 import com.example.util.TeamJerseyView
@@ -115,6 +121,8 @@ fun MatchLiveSheetScreen(
     var showShootoutDialog by remember { mutableStateOf(false) }
     var showMvpDialog by remember { mutableStateOf(false) }
     var showReopenDialog by remember { mutableStateOf(false) }
+    var showKickoffAnimation by remember { mutableStateOf(false) }
+    var showForfeitDialog by remember { mutableStateOf(false) }
     var eventToDelete by remember { mutableStateOf<MatchEvent?>(null) }
 
     LaunchedEffect(matchId) {
@@ -297,8 +305,14 @@ fun MatchLiveSheetScreen(
                         if (currentMatch.status == "SCHEDULED") {
                             Button(
                                 onClick = {
-                                    if (homeTeam != null && awayTeam != null) {
-                                        viewModel.startLiveMatch(context, currentMatch, homeTeam!!, awayTeam!!, matchDuration)
+                                    val prefs = context.getSharedPreferences("thebig_prefs", android.content.Context.MODE_PRIVATE)
+                                    val isPowerSaving = prefs.getBoolean("power_saving_mode", false)
+                                    if (isPowerSaving) {
+                                        if (homeTeam != null && awayTeam != null) {
+                                            viewModel.startLiveMatch(context, currentMatch, homeTeam!!, awayTeam!!, matchDuration)
+                                        }
+                                    } else {
+                                        showKickoffAnimation = true
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
@@ -307,6 +321,13 @@ fun MatchLiveSheetScreen(
                                 Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Iniciar Partido")
+                            }
+
+                            OutlinedButton(
+                                onClick = { showForfeitDialog = true },
+                                modifier = Modifier.testTag("forfeit_match_button")
+                            ) {
+                                Text("Forfait (3-0)", fontSize = 11.sp)
                             }
                         } else if (currentMatch.status == "LIVE") {
                             if (currentPeriod == "Descanso") {
@@ -882,6 +903,57 @@ fun MatchLiveSheetScreen(
             }
         )
     }
+
+    // Kickoff Parabolic Animation Overlay (<1.5s)
+    if (showKickoffAnimation) {
+        KickoffAnimationOverlay(
+            onComplete = {
+                showKickoffAnimation = false
+                if (homeTeam != null && awayTeam != null) {
+                    viewModel.startLiveMatch(context, currentMatch, homeTeam!!, awayTeam!!, matchDuration)
+                }
+            }
+        )
+    }
+
+    // Forfeit 3-0 Dialog
+    if (showForfeitDialog && homeTeam != null && awayTeam != null) {
+        AlertDialog(
+            onDismissRequest = { showForfeitDialog = false },
+            title = { Text("Declarar Victoria por Forfait (3-0)", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = {
+                Text(
+                    text = "Selecciona el equipo ganador. El partido se cerrará inmediatamente con marcador oficial 3-0.",
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            viewModel.declareForfeit(context, matchId, homeTeam!!.id)
+                            showForfeitDialog = false
+                        }
+                    ) {
+                        Text("Gana ${homeTeam!!.name}", fontSize = 11.sp)
+                    }
+                    Button(
+                        onClick = {
+                            viewModel.declareForfeit(context, matchId, awayTeam!!.id)
+                            showForfeitDialog = false
+                        }
+                    ) {
+                        Text("Gana ${awayTeam!!.name}", fontSize = 11.sp)
+                    }
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showForfeitDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -1127,9 +1199,11 @@ fun RosterPreviewCard(
 }
 
 /**
- * 2-Step Goal Dialog:
- * Step 1: Scorer selection (and team + goal type + minute)
- * Step 2: Assist selection (with prominent "Sin Asistencia" button)
+ * 2-Step Ultra-Compact Goal Dialog:
+ * Completely fits on screen without vertical scroll.
+ * 2-column clean grid with mini jerseys (TeamJerseyView) and prominent player names.
+ * Step 1: Tap scorer -> advances to Step 2
+ * Step 2: Tap "Sin Asistencia" or tap assister -> immediately registers goal and closes!
  */
 @Composable
 fun TwoStepGoalIncidentDialog(
@@ -1145,236 +1219,218 @@ fun TwoStepGoalIncidentDialog(
     var step by remember { mutableIntStateOf(1) } // 1: Scorer, 2: Assist
     var selectedTeamId by remember(initialTeam) { mutableLongStateOf(initialTeam?.id ?: homeTeam.id) }
     var selectedAuthorId by remember { mutableStateOf<Long?>(null) }
-    var selectedAssistId by remember { mutableStateOf<Long?>(null) }
     var isOwnGoal by remember { mutableStateOf(false) }
     var isPenalty by remember { mutableStateOf(false) }
     var minuteText by remember { mutableStateOf(defaultMinute.toString()) }
 
+    val currentTeam = if (selectedTeamId == homeTeam.id) homeTeam else awayTeam
     val currentRoster = if (selectedTeamId == homeTeam.id) homePlayers else awayPlayers
 
-    AlertDialog(
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = if (step == 1) "Paso 1: Autor del Gol" else "Paso 2: ¿Quién dio la Asistencia?",
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .heightIn(max = 580.dp)
+                .padding(6.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp
+        ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .fillMaxSize()
+                    .padding(14.dp)
             ) {
-                if (step == 1) {
-                    // Team selector
-                    Text("Equipo que anota:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                selectedTeamId = homeTeam.id
-                                selectedAuthorId = null
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (selectedTeamId == homeTeam.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(homeTeam.name, maxLines = 1, fontSize = 12.sp)
-                        }
-                        Button(
-                            onClick = {
-                                selectedTeamId = awayTeam.id
-                                selectedAuthorId = null
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (selectedTeamId == awayTeam.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(awayTeam.name, maxLines = 1, fontSize = 12.sp)
-                        }
-                    }
-
-                    // Goal Type Checkboxes
+                // Header: Crest, Team Name, and Step Indicator
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = isPenalty,
-                            onCheckedChange = {
-                                isPenalty = it
-                                if (it) isOwnGoal = false
-                            }
-                        )
-                        Text("Penal", fontSize = 12.sp)
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Checkbox(
-                            checked = isOwnGoal,
-                            onCheckedChange = {
-                                isOwnGoal = it
-                                if (it) isPenalty = false
-                            }
-                        )
-                        Text("Autogol", fontSize = 12.sp)
+                        TeamCrestView(team = currentTeam, size = 32.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = if (step == 1) "Anotador: ${currentTeam.name}" else "Asistencia: ${currentTeam.name}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = if (step == 1) "Paso 1 de 2 • Toca el autor del gol" else "Paso 2 de 2 • Toca asistidor o 'Sin Asistencia'",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Cerrar")
+                    }
+                }
 
-                    OutlinedTextField(
-                        value = minuteText,
-                        onValueChange = { minuteText = it },
-                        label = { Text("Minuto") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text(
-                        text = if (isOwnGoal) "Jugador en contra (Obligatorio):" else "Goleador (Obligatorio de la Plantilla):",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        color = if (selectedAuthorId == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                    )
-
-                    if (currentRoster.isEmpty()) {
-                        Text(
-                            text = "No hay jugadores en la plantilla de este equipo.",
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 12.sp
-                        )
-                    } else {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                                .padding(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                // Compact Bar: Switch Team, Minute, Penalty/Autogol
+                if (step == 1) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                selectedTeamId = if (selectedTeamId == homeTeam.id) awayTeam.id else homeTeam.id
+                                selectedAuthorId = null
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                         ) {
-                            currentRoster.forEach { player ->
-                                val isSelected = selectedAuthorId == player.id
-                                Surface(
+                            Text("Cambiar a ${if (selectedTeamId == homeTeam.id) awayTeam.shortName else homeTeam.shortName}", fontSize = 11.sp)
+                        }
+
+                        FilterChip(
+                            selected = isPenalty,
+                            onClick = {
+                                isPenalty = !isPenalty
+                                if (isPenalty) isOwnGoal = false
+                            },
+                            label = { Text("Penal", fontSize = 10.sp) }
+                        )
+
+                        FilterChip(
+                            selected = isOwnGoal,
+                            onClick = {
+                                isOwnGoal = !isOwnGoal
+                                if (isOwnGoal) isPenalty = false
+                            },
+                            label = { Text("Autogol", fontSize = 10.sp) }
+                        )
+
+                        OutlinedTextField(
+                            value = minuteText,
+                            onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) minuteText = it },
+                            label = { Text("Min", fontSize = 9.sp) },
+                            singleLine = true,
+                            modifier = Modifier.width(54.dp)
+                        )
+                    }
+                } else {
+                    // Step 2 Prominent "Sin Asistencia" Button
+                    Button(
+                        onClick = {
+                            val min = minuteText.toIntOrNull() ?: defaultMinute
+                            onConfirm(selectedTeamId, selectedAuthorId!!, null, isOwnGoal, isPenalty, min)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.SportsSoccer, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Gol Directo (Sin Asistencia)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+
+                // 2-Column Clean Grid of Players with Mini Jerseys
+                val candidatePlayers = if (step == 1) currentRoster else currentRoster.filter { it.id != selectedAuthorId }
+
+                if (candidatePlayers.isEmpty()) {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("Sin jugadores en plantilla", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        items(candidatePlayers) { player ->
+                            val isChosen = if (step == 1) selectedAuthorId == player.id else false
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        if (step == 1) {
+                                            selectedAuthorId = player.id
+                                            if (isOwnGoal) {
+                                                val min = minuteText.toIntOrNull() ?: defaultMinute
+                                                onConfirm(selectedTeamId, player.id, null, true, false, min)
+                                            } else {
+                                                step = 2
+                                            }
+                                        } else {
+                                            val min = minuteText.toIntOrNull() ?: defaultMinute
+                                            onConfirm(selectedTeamId, selectedAuthorId!!, player.id, isOwnGoal, isPenalty, min)
+                                        }
+                                    },
+                                shape = RoundedCornerShape(10.dp),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    width = if (isChosen) 2.dp else 1.dp,
+                                    color = if (isChosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                ),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isChosen) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                )
+                            ) {
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { selectedAuthorId = player.id },
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        RadioButton(
-                                            selected = isSelected,
-                                            onClick = { selectedAuthorId = player.id }
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
+                                    TeamJerseyView(
+                                        team = currentTeam,
+                                        isGoalkeeper = player.isGoalkeeper,
+                                        dorsal = player.dorsal,
+                                        size = 28.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "#${pDorsal(player.dorsal)} ${player.name}${if (player.isCaptain) " (C)" else ""}",
-                                            fontSize = 13.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            text = player.name,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            maxLines = 1
+                                        )
+                                        Text(
+                                            text = "#${player.dorsal}${if (player.isCaptain) " (C)" else ""}",
+                                            fontSize = 10.sp,
+                                            color = if (player.isCaptain) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = if (player.isCaptain) FontWeight.Bold else FontWeight.Normal
                                         )
                                     }
                                 }
                             }
                         }
                     }
-                } else {
-                    // Step 2: Assist
-                    Text(
-                        text = "Selecciona el jugador que dio el pase de gol o pulsa 'Sin Asistencia':",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                }
 
-                    Button(
-                        onClick = {
-                            val minute = minuteText.toIntOrNull() ?: defaultMinute
-                            onConfirm(selectedTeamId, selectedAuthorId!!, null, isOwnGoal, isPenalty, minute)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                // Footer button (only needed in Step 2 to go back)
+                if (step == 2) {
+                    OutlinedButton(
+                        onClick = { step = 1 },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Gol Directo (Sin Asistencia)")
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("O selecciona un asistidor:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-
-                    val assistCandidates = currentRoster.filter { it.id != selectedAuthorId }
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .padding(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        assistCandidates.forEach { player ->
-                            val isSelected = selectedAssistId == player.id
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { selectedAssistId = player.id },
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = { selectedAssistId = player.id }
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "#${pDorsal(player.dorsal)} ${player.name}${if (player.isCaptain) " (C)" else ""}",
-                                        fontSize = 13.sp
-                                    )
-                                }
-                            }
-                        }
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Cambiar Anotador", fontSize = 12.sp)
                     }
                 }
-            }
-        },
-        confirmButton = {
-            if (step == 1) {
-                Button(
-                    onClick = {
-                        if (isOwnGoal) {
-                            val minute = minuteText.toIntOrNull() ?: defaultMinute
-                            onConfirm(selectedTeamId, selectedAuthorId!!, null, true, false, minute)
-                        } else {
-                            step = 2
-                        }
-                    },
-                    enabled = selectedAuthorId != null,
-                    modifier = Modifier.testTag("confirm_step1_goal")
-                ) {
-                    Text(if (isOwnGoal) "Guardar Autogol" else "Siguiente (Asistencia)")
-                }
-            } else {
-                Button(
-                    onClick = {
-                        val minute = minuteText.toIntOrNull() ?: defaultMinute
-                        onConfirm(selectedTeamId, selectedAuthorId!!, selectedAssistId, isOwnGoal, isPenalty, minute)
-                    },
-                    modifier = Modifier.testTag("confirm_step2_goal")
-                ) {
-                    Text("Guardar Gol")
-                }
-            }
-        },
-        dismissButton = {
-            OutlinedButton(
-                onClick = {
-                    if (step == 2) step = 1 else onDismiss()
-                }
-            ) {
-                Text(if (step == 2) "Atrás" else "Cancelar")
             }
         }
-    )
+    }
 }
 
 @Composable

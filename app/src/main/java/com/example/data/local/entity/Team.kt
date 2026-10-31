@@ -16,5 +16,6 @@ data class Team(
     val customShieldUri: String? = null,
     val jerseyPattern: String = "SOLID", // SOLID, STRIPES_VERTICAL, STRIPES_HORIZONTAL, SASH, HALF
     val goalkeeperColorHex: String = "#10B981", // Exclusivo para el portero
+    val shieldPrimaryColorHex: String = "#F59E0B", // Color exclusivo del escudo vectorial
     val createdAt: Long = System.currentTimeMillis()
 )

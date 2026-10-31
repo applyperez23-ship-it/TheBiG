@@ -161,7 +161,7 @@ fun TeamsScreen(
     if (showCreateDialog) {
         com.example.ui.components.CreateTeamWizardDialog(
             onDismiss = { showCreateDialog = false },
-            onConfirm = { name, shortName, shieldIdx, pColor, sColor, bColor, customUri, pattern, gkColor, roster ->
+            onConfirm = { name, shortName, shieldIdx, pColor, sColor, bColor, customUri, pattern, gkColor, roster, shieldColor ->
                 scope.launch {
                     val id = viewModel.createTeam(
                         name = name,
@@ -172,7 +172,8 @@ fun TeamsScreen(
                         borderColorHex = bColor,
                         customShieldUri = customUri,
                         jerseyPattern = pattern,
-                        goalkeeperColorHex = gkColor
+                        goalkeeperColorHex = gkColor,
+                        shieldPrimaryColorHex = shieldColor
                     )
                     // Add initial roster
                     for (dp in roster) {

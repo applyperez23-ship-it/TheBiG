@@ -44,8 +44,12 @@ data class Tournament(
     val yellowCardFine: Double = 5.0,
     val redCardFine: Double = 10.0,
     val minMatchesForBestGk: Int = 2,
+    val financialModel: String = "BY_TEAM", // BY_TEAM or BY_PLAYER
     val createdAt: Long = System.currentTimeMillis()
 ) {
     val feePerPlayer: Double
-        get() = if (playersPerTeam > 0) entryFee / playersPerTeam else 0.0
+        get() = if (financialModel == "BY_PLAYER") entryFee else (if (playersPerTeam > 0) entryFee / playersPerTeam else 0.0)
+
+    val totalTeamFee: Double
+        get() = if (financialModel == "BY_PLAYER") entryFee * playersPerTeam else entryFee
 }
