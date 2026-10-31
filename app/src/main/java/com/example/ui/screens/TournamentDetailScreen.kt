@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -237,6 +239,18 @@ fun TournamentDetailScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            val pagerState = rememberPagerState(pageCount = { 4 })
+
+            LaunchedEffect(pagerState.currentPage) {
+                selectedSubTab = pagerState.currentPage
+            }
+
+            LaunchedEffect(selectedSubTab) {
+                if (pagerState.currentPage != selectedSubTab) {
+                    pagerState.animateScrollToPage(selectedSubTab)
+                }
+            }
+
             TabRow(
                 selectedTabIndex = selectedSubTab,
                 containerColor = MaterialTheme.colorScheme.surface,
@@ -264,73 +278,78 @@ fun TournamentDetailScreen(
                 )
             }
 
-            when (selectedSubTab) {
-                0 -> StandingsTabContent(
-                    tournament = tournament,
-                    standings = standings,
-                    matches = matches,
-                    enrolledTeams = enrolledTeams,
-                    onMatchClick = onMatchClick,
-                    onExportTable = {
-                        val bmp = GraphicCardGenerator.generateStandingsInstagramBitmap(tournament, standings)
-                        GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Tabla")
-                    },
-                    onOpenEnroll = { showEnrollDialog = true }
-                )
-                1 -> FixtureTabContent(
-                    tournament = tournament,
-                    matches = matches,
-                    enrolledTeams = enrolledTeams,
-                    onGenerate = {
-                        scope.launch {
-                            val newMatches = TournamentScheduler.generateSchedule(
-                                tournamentId = tournamentId,
-                                tournamentType = tournament.tournamentType,
-                                teams = enrolledTeams,
-                                homeAndAway = false
-                            )
-                            for (m in newMatches) {
-                                app.repository.saveMatch(m)
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                when (page) {
+                    0 -> StandingsTabContent(
+                        tournament = tournament,
+                        standings = standings,
+                        matches = matches,
+                        enrolledTeams = enrolledTeams,
+                        onMatchClick = onMatchClick,
+                        onExportTable = {
+                            val bmp = GraphicCardGenerator.generateStandingsInstagramBitmap(tournament, standings)
+                            GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Tabla")
+                        },
+                        onOpenEnroll = { showEnrollDialog = true }
+                    )
+                    1 -> FixtureTabContent(
+                        tournament = tournament,
+                        matches = matches,
+                        enrolledTeams = enrolledTeams,
+                        onGenerate = {
+                            scope.launch {
+                                val newMatches = TournamentScheduler.generateSchedule(
+                                    tournamentId = tournamentId,
+                                    tournamentType = tournament.tournamentType,
+                                    teams = enrolledTeams,
+                                    homeAndAway = false
+                                )
+                                for (m in newMatches) {
+                                    app.repository.saveMatch(m)
+                                }
                             }
+                        },
+                        onMatchClick = onMatchClick,
+                        onExportFixture = {
+                            val teamMap = enrolledTeams.associateBy { it.id }
+                            val bmp = GraphicCardGenerator.generateFixtureInstagramBitmap(tournament, matches, teamMap)
+                            GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Fixture")
                         }
-                    },
-                    onMatchClick = onMatchClick,
-                    onExportFixture = {
-                        val teamMap = enrolledTeams.associateBy { it.id }
-                        val bmp = GraphicCardGenerator.generateFixtureInstagramBitmap(tournament, matches, teamMap)
-                        GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Fixture")
-                    }
-                )
-                2 -> StatisticsTabContent(
-                    topScorers = topScorers,
-                    topAssisters = topAssisters,
-                    goalkeepers = goalkeeperRankings,
-                    onExportScorers = {
-                        val bmp = GraphicCardGenerator.generateScorersInstagramBitmap(tournament, topScorers)
-                        GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Goleadores")
-                    }
-                )
-                3 -> IsolatedFinancesTabContent(
-                    tournament = tournament,
-                    enrolledTeams = enrolledTeams,
-                    players = players,
-                    crossRefs = crossRefs,
-                    onTogglePlayerFee = { playerId, current ->
-                        scope.launch {
-                            app.repository.updatePlayerFeeStatus(playerId, !current)
+                    )
+                    2 -> StatisticsTabContent(
+                        topScorers = topScorers,
+                        topAssisters = topAssisters,
+                        goalkeepers = goalkeeperRankings,
+                        onExportScorers = {
+                            val bmp = GraphicCardGenerator.generateScorersInstagramBitmap(tournament, topScorers)
+                            GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Goleadores")
                         }
-                    },
-                    onUpdatePrizes = { ch, ru, sc, gk ->
-                        viewModel.updateTournament(
-                            tournament.copy(
-                                prizeChampionAmount = ch,
-                                prizeRunnerUpAmount = ru,
-                                prizeTopScorerAmount = sc,
-                                prizeBestGkAmount = gk
+                    )
+                    3 -> IsolatedFinancesTabContent(
+                        tournament = tournament,
+                        enrolledTeams = enrolledTeams,
+                        players = players,
+                        crossRefs = crossRefs,
+                        onTogglePlayerFee = { playerId, current ->
+                            scope.launch {
+                                app.repository.updatePlayerFeeStatus(playerId, !current)
+                            }
+                        },
+                        onUpdatePrizes = { ch, ru, sc, gk ->
+                            viewModel.updateTournament(
+                                tournament.copy(
+                                    prizeChampionAmount = ch,
+                                    prizeRunnerUpAmount = ru,
+                                    prizeTopScorerAmount = sc,
+                                    prizeBestGkAmount = gk
+                                )
                             )
-                        )
-                    }
-                )
+                        }
+                    )
+                }
             }
         }
     }

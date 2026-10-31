@@ -539,6 +539,50 @@ object TheBiGBackupHelper {
     }
 
     /**
+     * Reads text/JSON content directly from a file Uri (supporting raw JSON, Base64, and .tb ZIP archives).
+     */
+    fun readTbContentFromUri(context: Context, uri: Uri): String {
+        try {
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return ""
+            if (bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4B.toByte()) {
+                ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
+                    var entry = zis.nextEntry
+                    while (entry != null) {
+                        if (entry.name == "data.json") {
+                            return zis.bufferedReader(Charsets.UTF_8).readText()
+                        }
+                        entry = zis.nextEntry
+                    }
+                }
+            }
+            val rawStr = String(bytes, Charsets.UTF_8).trim()
+            if (rawStr.startsWith("{")) return rawStr
+            try {
+                val decoded = Base64.decode(rawStr, Base64.DEFAULT)
+                if (decoded.size >= 4 && decoded[0] == 0x50.toByte() && decoded[1] == 0x4B.toByte()) {
+                    ZipInputStream(ByteArrayInputStream(decoded)).use { zis ->
+                        var entry = zis.nextEntry
+                        while (entry != null) {
+                            if (entry.name == "data.json") {
+                                return zis.bufferedReader(Charsets.UTF_8).readText()
+                            }
+                            entry = zis.nextEntry
+                        }
+                    }
+                }
+                val decStr = String(decoded, Charsets.UTF_8).trim()
+                if (decStr.startsWith("{")) return decStr
+            } catch (e: Exception) {
+                // Not base64
+            }
+            return rawStr
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return ""
+        }
+    }
+
+    /**
      * Shares the exported .tb file via standard Android share sheet.
      */
     fun shareTbFile(context: Context, fileUri: Uri, tournamentName: String) {

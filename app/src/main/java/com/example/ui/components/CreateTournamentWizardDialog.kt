@@ -225,31 +225,18 @@ fun CreateTournamentWizardDialog(
                                         .testTag("wizard_tournament_name_input")
                                 )
 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    OutlinedTextField(
-                                        value = edition,
-                                        onValueChange = { edition = it },
-                                        label = { Text("Edición (ej: 1, 2026)") },
-                                        singleLine = true,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    OutlinedTextField(
-                                        value = playersPerTeamText,
-                                        onValueChange = {
-                                            // Allow backspace to empty without reverting immediately
-                                            if (it.isEmpty() || it.all { char -> char.isDigit() }) {
-                                                playersPerTeamText = it
-                                            }
-                                        },
-                                        label = { Text("Jugadores/Equipo") },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        singleLine = true,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
+                                OutlinedTextField(
+                                    value = playersPerTeamText,
+                                    onValueChange = {
+                                        if (it.isEmpty() || it.all { char -> char.isDigit() }) {
+                                            playersPerTeamText = it
+                                        }
+                                    },
+                                    label = { Text("Jugadores por Equipo") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
 
                                 Text(
                                     text = "Formato de Competencia:",
