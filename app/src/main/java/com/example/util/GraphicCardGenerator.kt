@@ -644,4 +644,77 @@ enum class ChampionDesignMode {
         drawFooterBrand(canvas)
         return bitmap
     }
+
+    /**
+     * Generates a 1080x1080 px Instagram feed card for the Team Roster / Squad.
+     */
+    fun generateSquadInstagramBitmap(team: Team, players: List<Player>, context: Context? = null): Bitmap {
+        val bitmap = Bitmap.createBitmap(CARD_SIZE, CARD_SIZE, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        drawInstagramBackground(canvas)
+        drawWatermarkAndBranding(canvas, team.name, "PLANTILLA OFICIAL • SQUAD ROSTER")
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        // Draw Team Crest centered
+        TeamCrestHelper.drawTeamShieldOnAndroidCanvas(
+            canvas = canvas,
+            cx = 120f,
+            cy = 130f,
+            radius = 42f,
+            team = team,
+            context = context
+        )
+
+        // Player roster grid in 2 columns
+        var col1Y = 240f
+        var col2Y = 240f
+        val displayPlayers = players.take(22)
+
+        displayPlayers.forEachIndexed { idx, player ->
+            val isCol1 = idx % 2 == 0
+            val left = if (isCol1) 60f else 560f
+            val top = if (isCol1) col1Y else col2Y
+            val right = if (isCol1) 520f else 1020f
+            val bottom = top + 58f
+
+            // Player Card background
+            paint.color = if (player.isCaptain) Color.parseColor("#1E2A3A") else Color.parseColor("#151D2A")
+            paint.style = Paint.Style.FILL
+            canvas.drawRoundRect(RectF(left, top, right, bottom), 10f, 10f, paint)
+
+            if (player.isCaptain) {
+                paint.color = Color.parseColor("#F59E0B")
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 2f
+                canvas.drawRoundRect(RectF(left, top, right, bottom), 10f, 10f, paint)
+                paint.style = Paint.Style.FILL
+            }
+
+            // Dorsal
+            paint.color = if (player.isCaptain) Color.parseColor("#F59E0B") else Color.WHITE
+            paint.textSize = 24f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas.drawText("#${player.dorsal}", left + 16f, top + 38f, paint)
+
+            // Name
+            paint.color = Color.WHITE
+            paint.textSize = 22f
+            val pLabel = player.name + if (player.isCaptain) " (C)" else ""
+            canvas.drawText(pLabel.take(16), left + 80f, top + 38f, paint)
+
+            // Position Tag
+            paint.color = if (player.isGoalkeeper) Color.parseColor("#10B981") else Color.parseColor("#94A3B8")
+            paint.textSize = 16f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            canvas.drawText(if (player.isGoalkeeper) "POR" else "CAMPO", right - 75f, top + 36f, paint)
+
+            if (isCol1) col1Y += 66f else col2Y += 66f
+        }
+
+        drawFooterBrand(canvas)
+        return bitmap
+    }
 }
+

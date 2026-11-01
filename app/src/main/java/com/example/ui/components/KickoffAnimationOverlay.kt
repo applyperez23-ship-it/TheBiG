@@ -100,12 +100,17 @@ fun KickoffAnimationOverlay(
         val screenWidth = maxWidth
         val screenHeight = maxHeight
 
-        // Start coordinate: corner (bottom-left)
-        // End coordinate: center
-        val startX = -screenWidth * 0.4f
-        val startY = screenHeight * 0.4f
-        val currentX = startX * (1f - travelProgress.value)
-        val currentY = startY * (1f - travelProgress.value)
+        // Start coordinate: bottom-left corner
+        val startX = -screenWidth.value * 0.45f
+        val startY = screenHeight.value * 0.45f
+        // Control point curving upwards ("efecto comba")
+        val controlX = -screenWidth.value * 0.15f
+        val controlY = -screenHeight.value * 0.35f
+
+        val t = travelProgress.value
+        val u = 1f - t
+        val currentX = (u * u * startX + 2 * u * t * controlX + t * t * 0f).dp
+        val currentY = (u * u * startY + 2 * u * t * controlY + t * t * 0f).dp
 
         // Explosive energy shockwave ring behind the ball
         if (travelProgress.value > 0.8f) {

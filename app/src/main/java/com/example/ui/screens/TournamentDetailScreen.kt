@@ -106,6 +106,10 @@ import com.example.util.TeamCrestView
 import com.example.util.TheBiGBackupHelper
 import kotlinx.coroutines.launch
 
+import android.graphics.Bitmap
+import android.net.Uri
+import com.example.ui.components.ExportSaveOrShareDialog
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TournamentDetailScreen(
@@ -132,6 +136,8 @@ fun TournamentDetailScreen(
     var showChampionDialog by remember { mutableStateOf(false) }
     var showCelebrationDialog by remember { mutableStateOf(false) }
     var selectedMatchForSquad by remember { mutableStateOf<Match?>(null) }
+    var exportDialogData by remember { mutableStateOf<Triple<String, String, Any?>?>(null) }
+    var pendingMatchesWarning by remember { mutableStateOf<List<Match>?>(null) }
     val scope = rememberCoroutineScope()
 
     val app = TheBiGApp.instance
@@ -164,6 +170,17 @@ fun TournamentDetailScreen(
     val standings = remember(enrolledTeams, matches) {
         StandingsCalculator.calculate(enrolledTeams, matches)
     }
+
+    // Auto-crown Champion in Round-Robin League when all matches finish
+    LaunchedEffect(matches, standings) {
+        if (tournament.championTeamId == null && matches.isNotEmpty() && matches.all { it.status == "FINISHED" } && standings.isNotEmpty()) {
+            val champ = standings.first().team
+            val runnerUp = standings.getOrNull(1)?.team
+            viewModel.setChampion(tournamentId, champ.id, runnerUp?.id)
+            showCelebrationDialog = true
+        }
+    }
+
 
     val topScorers = remember(events, players, enrolledTeams) {
         StatsCalculator.getTopScorers(events, players, enrolledTeams)
@@ -211,7 +228,7 @@ fun TournamentDetailScreen(
                             scope.launch {
                                 val uri = TheBiGBackupHelper.exportTournamentTbFile(context, app.repository, tournamentId)
                                 if (uri != null) {
-                                    TheBiGBackupHelper.shareTbFile(context, uri, tournament.name)
+                                    exportDialogData = Triple("Copia de Seguridad .tb", "${tournament.name}_backup.tb", uri)
                                 }
                             }
                         }
@@ -300,7 +317,7 @@ fun TournamentDetailScreen(
                         onMatchClick = onMatchClick,
                         onExportTable = {
                             val bmp = GraphicCardGenerator.generateStandingsInstagramBitmap(tournament, standings, context)
-                            GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Tabla")
+                            exportDialogData = Triple("Tabla de Posiciones", "Tabla_${tournament.name}.png", bmp)
                         },
                         onOpenEnroll = { showEnrollDialog = true },
                         onCelebrateChampion = { showCelebrationDialog = true }
@@ -324,15 +341,20 @@ fun TournamentDetailScreen(
                             }
                         },
                         onAdvancePhase = {
-                            scope.launch {
-                                val nextMatches = TournamentScheduler.advanceToNextPhase(
-                                    tournamentId = tournamentId,
-                                    tournamentType = tournament.tournamentType,
-                                    allMatches = matches,
-                                    enrolledTeams = enrolledTeams
-                                )
-                                for (m in nextMatches) {
-                                    app.repository.saveMatch(m)
+                            val pending = matches.filter { it.status != "FINISHED" }
+                            if (pending.isNotEmpty()) {
+                                pendingMatchesWarning = pending
+                            } else {
+                                scope.launch {
+                                    val nextMatches = TournamentScheduler.advanceToNextPhase(
+                                        tournamentId = tournamentId,
+                                        tournamentType = tournament.tournamentType,
+                                        allMatches = matches,
+                                        enrolledTeams = enrolledTeams
+                                    )
+                                    for (m in nextMatches) {
+                                        app.repository.saveMatch(m)
+                                    }
                                 }
                             }
                         },
@@ -341,7 +363,7 @@ fun TournamentDetailScreen(
                         onExportFixture = {
                             val teamMap = enrolledTeams.associateBy { it.id }
                             val bmp = GraphicCardGenerator.generateFixtureInstagramBitmap(tournament, matches, teamMap)
-                            GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Fixture")
+                            exportDialogData = Triple("Fixture Oficial", "Fixture_${tournament.name}.png", bmp)
                         }
                     )
                     2 -> StatisticsTabContent(
@@ -353,7 +375,7 @@ fun TournamentDetailScreen(
                         context = context,
                         onExportScorers = {
                             val bmp = GraphicCardGenerator.generateScorersInstagramBitmap(tournament, topScorers)
-                            GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Goleadores")
+                            exportDialogData = Triple("Tabla de Goleadores", "Goleadores_${tournament.name}.png", bmp)
                         },
                         onExportUnifiedLeaders = {
                             val bmp = GraphicCardGenerator.generateUnifiedLeadersBitmap(
@@ -364,10 +386,11 @@ fun TournamentDetailScreen(
                                 standings = standings,
                                 context = context
                             )
-                            GraphicCardGenerator.shareBitmap(context, bmp, "Líderes Oficiales - ${tournament.name}")
+                            exportDialogData = Triple("Líderes Unificados", "Lideres_${tournament.name}.png", bmp)
                         }
                     )
                     3 -> IsolatedFinancesTabContent(
+
                         tournament = tournament,
                         enrolledTeams = enrolledTeams,
                         players = players,
@@ -462,7 +485,40 @@ fun TournamentDetailScreen(
             onDismiss = { selectedMatchForSquad = null }
         )
     }
+
+    exportDialogData?.let { (title, fileName, payload) ->
+        ExportSaveOrShareDialog(
+            title = title,
+            fileName = fileName,
+            fileUri = payload as? Uri,
+            bitmap = payload as? Bitmap,
+            onDismiss = { exportDialogData = null }
+        )
+    }
+
+    pendingMatchesWarning?.let { pendingList ->
+        AlertDialog(
+            onDismissRequest = { pendingMatchesWarning = null },
+            title = { Text("Partidos Pendientes", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Debes finalizar todos los partidos de la fase actual antes de pasar a la siguiente fase:")
+                    LazyColumn(modifier = Modifier.height(180.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(pendingList) { m ->
+                            Text("• ${m.roundName}: Partido #${m.id}", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { pendingMatchesWarning = null }) {
+                    Text("Entendido")
+                }
+            }
+        )
+    }
 }
+
 
 @Composable
 private fun StandingsTabContent(

@@ -13,8 +13,8 @@ android {
         applicationId = "com.aistudio.thebig.ftbol"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.8"
+        versionCode = 6
+        versionName = "1.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -87,6 +87,10 @@ import com.example.util.TeamJerseyView
 import com.example.util.TheBiGBackupHelper
 import kotlinx.coroutines.launch
 
+import android.graphics.Bitmap
+import com.example.ui.components.ExportSaveOrShareDialog
+import com.example.util.GraphicCardGenerator
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TeamDetailScreen(
@@ -105,6 +109,7 @@ fun TeamDetailScreen(
     var showEditTeamDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var playerToDelete by remember { mutableStateOf<Player?>(null) }
+    var exportDialogData by remember { mutableStateOf<Triple<String, String, Any?>?>(null) }
     val scope = rememberCoroutineScope()
 
     if (team == null) {
@@ -146,18 +151,30 @@ fun TeamDetailScreen(
                     }
                 },
                 actions = {
+                    // Export Squad Card
+                    IconButton(
+                        onClick = {
+                            val bmp = GraphicCardGenerator.generateSquadInstagramBitmap(team, players, context)
+                            exportDialogData = Triple("Plantilla ${team.name}", "Plantilla_${team.shortName}.png", bmp)
+                        }
+                    ) {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = "Compartir Plantilla HD")
+                    }
+
+                    // Export .tb file
                     IconButton(
                         onClick = {
                             scope.launch {
                                 val uri = TheBiGBackupHelper.exportSingleTeamTbFile(context, TheBiGApp.instance.repository, team.id)
                                 if (uri != null) {
-                                    TheBiGBackupHelper.shareTbFile(context, uri, "Club ${team.name}")
+                                    exportDialogData = Triple("Exportar Club ${team.name}", "Club_${team.shortName}_backup.tb", uri)
                                 }
                             }
                         }
                     ) {
                         Icon(Icons.Default.Share, contentDescription = "Exportar Club (.tb)")
                     }
+
                     IconButton(onClick = { showEditTeamDialog = true }) {
                         Icon(Icons.Default.Edit, contentDescription = "Editar Uniforme y Escudo")
                     }
@@ -167,6 +184,7 @@ fun TeamDetailScreen(
                 )
             )
         },
+
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
@@ -338,7 +356,18 @@ fun TeamDetailScreen(
             }
         )
     }
+
+    exportDialogData?.let { (title, fileName, payload) ->
+        ExportSaveOrShareDialog(
+            title = title,
+            fileName = fileName,
+            fileUri = payload as? Uri,
+            bitmap = payload as? Bitmap,
+            onDismiss = { exportDialogData = null }
+        )
+    }
 }
+
 
 @Composable
 private fun PlayerRowCard(

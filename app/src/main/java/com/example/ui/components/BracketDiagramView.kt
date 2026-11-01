@@ -30,6 +30,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -40,9 +44,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.graphics.graphicsLayer
 import com.example.data.local.entity.Match
 import com.example.data.local.entity.Team
 import com.example.util.TeamCrestView
+
 
 @Composable
 fun BracketDiagramView(
@@ -52,12 +60,12 @@ fun BracketDiagramView(
 ) {
     val teamMap = remember(teams) { teams.associateBy { it.id } }
 
-    // Group matches by round
+    val octavos = matches.filter { it.roundName.contains("Octavos", ignoreCase = true) }
     val quarters = matches.filter { it.roundName.contains("Cuartos", ignoreCase = true) }
     val semis = matches.filter { it.roundName.contains("Semi", ignoreCase = true) }
     val finals = matches.filter { it.roundName.contains("Final", ignoreCase = true) && !it.roundName.contains("Semi", ignoreCase = true) && !it.roundName.contains("Cuartos", ignoreCase = true) && !it.roundName.contains("Octavos", ignoreCase = true) }
 
-    val hasAnyKnockout = quarters.isNotEmpty() || semis.isNotEmpty() || finals.isNotEmpty()
+    val hasAnyKnockout = octavos.isNotEmpty() || quarters.isNotEmpty() || semis.isNotEmpty() || finals.isNotEmpty()
 
     if (!hasAnyKnockout) {
         Box(
@@ -75,6 +83,9 @@ fun BracketDiagramView(
         return
     }
 
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -88,62 +99,110 @@ fun BracketDiagramView(
                 .padding(14.dp)
         ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Default.EmojiEvents,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Text(
-                    text = "Cuadro Eliminatorio (Brackets)",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Default.EmojiEvents,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Cuadro Eliminatorio (Brackets)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = "Navegación Panorámica",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Scrollable bracket container
-            Row(
+            // Interactive Zoom/Pan Canvas Box
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scale = (scale * zoom).coerceIn(0.7f, 2.5f)
+                            offset += pan
+                        }
+                    }
             ) {
-                // Column 1: Cuartos de Final (if any)
-                if (quarters.isNotEmpty()) {
-                    BracketColumn(
-                        roundTitle = "Cuartos de Final",
-                        matches = quarters,
-                        teamMap = teamMap,
-                        onMatchClick = onMatchClick
-                    )
-                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .verticalScroll(rememberScrollState())
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offset.x,
+                            translationY = offset.y
+                        ),
 
-                // Column 2: Semifinales
-                if (semis.isNotEmpty()) {
-                    BracketColumn(
-                        roundTitle = "Semifinales",
-                        matches = semis,
-                        teamMap = teamMap,
-                        onMatchClick = onMatchClick
-                    )
-                }
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Column 0: Octavos de Final (if any)
+                    if (octavos.isNotEmpty()) {
+                        BracketColumn(
+                            roundTitle = "Octavos de Final",
+                            matches = octavos,
+                            teamMap = teamMap,
+                            onMatchClick = onMatchClick
+                        )
+                    }
 
-                // Column 3: Gran Final
-                if (finals.isNotEmpty()) {
-                    BracketColumn(
-                        roundTitle = "Gran Final",
-                        matches = finals,
-                        teamMap = teamMap,
-                        isFinal = true,
-                        onMatchClick = onMatchClick
-                    )
+                    // Column 1: Cuartos de Final (if any)
+                    if (quarters.isNotEmpty()) {
+                        BracketColumn(
+                            roundTitle = "Cuartos de Final",
+                            matches = quarters,
+                            teamMap = teamMap,
+                            onMatchClick = onMatchClick
+                        )
+                    }
+
+                    // Column 2: Semifinales
+                    if (semis.isNotEmpty()) {
+                        BracketColumn(
+                            roundTitle = "Semifinales",
+                            matches = semis,
+                            teamMap = teamMap,
+                            onMatchClick = onMatchClick
+                        )
+                    }
+
+                    // Column 3: Gran Final
+                    if (finals.isNotEmpty()) {
+                        BracketColumn(
+                            roundTitle = "Gran Final",
+                            matches = finals,
+                            teamMap = teamMap,
+                            isFinal = true,
+                            onMatchClick = onMatchClick
+                        )
+                    }
                 }
             }
         }

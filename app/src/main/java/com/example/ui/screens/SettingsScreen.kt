@@ -241,7 +241,7 @@ fun SettingsScreen(
                                 .padding(vertical = 2.dp)
                         ) {
                             Text(
-                                text = "TheBiG v1.8 • Creado por Daniel el grande",
+                                text = "TheBiG v1.9 • Creado por Daniel el grande",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
@@ -609,7 +609,7 @@ fun SettingsScreen(
                             fontSize = 14.sp
                         )
                         Text(
-                            text = "Versión instalada: v1.8.0 (Estable)",
+                            text = "Versión instalada: v1.9.0 (Estable)",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1008,7 +1008,7 @@ fun SettingsScreen(
                     } else {
                         Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(40.dp))
                         Text(
-                            text = "TheBiG está actualizado a la versión v1.8.0.",
+                            text = "TheBiG está actualizado a la versión v1.9.0.",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             textAlign = TextAlign.Center
