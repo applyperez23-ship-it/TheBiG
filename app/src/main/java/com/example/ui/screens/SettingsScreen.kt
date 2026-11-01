@@ -128,6 +128,7 @@ fun SettingsScreen(
     var showUpdateCheckDialog by remember { mutableStateOf(false) }
     var isCheckingUpdates by remember { mutableStateOf(false) }
     var showQrShareDialog by remember { mutableStateOf(false) }
+    var showCameraQrScanner by remember { mutableStateOf(false) }
 
     val qrImagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -564,9 +565,7 @@ fun SettingsScreen(
 
                         OutlinedButton(
                             onClick = {
-                                qrImagePickerLauncher.launch(
-                                    androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
+                                showCameraQrScanner = true
                             },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
@@ -1105,6 +1104,22 @@ fun SettingsScreen(
             confirmButton = {
                 Button(onClick = { showQrShareDialog = false }) {
                     Text("Cerrar")
+                }
+            }
+        )
+    }
+
+    if (showCameraQrScanner) {
+        com.example.ui.components.CameraQrScannerDialog(
+            onDismissRequest = { showCameraQrScanner = false },
+            onQrScanned = { scannedCode ->
+                showCameraQrScanner = false
+                if (scannedCode.startsWith("{") || scannedCode.startsWith("UEsD")) {
+                    importTbText = scannedCode
+                    showImportDialog = true
+                    Toast.makeText(context, "Paquete .tb detectado desde el QR", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Contenido QR: $scannedCode", Toast.LENGTH_LONG).show()
                 }
             }
         )

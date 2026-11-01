@@ -72,6 +72,11 @@ import com.example.util.ChampionStudioHelper
 import com.example.util.GraphicCardGenerator
 import com.example.util.ImageEnhancer
 import com.example.util.TeamCrestView
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -325,12 +330,23 @@ fun ChampionPhotoStudioScreen(
                 fontSize = 15.sp
             )
 
+            var previewScale by remember { mutableFloatStateOf(1f) }
+            var previewOffset by remember { mutableStateOf(Offset.Zero) }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
                     .border(2.dp, Color(0xFFF59E0B), RoundedCornerShape(16.dp))
-                    .background(Color.Black, RoundedCornerShape(16.dp)),
+                    .background(Color.Black, RoundedCornerShape(16.dp))
+                    .pointerInput(selectedDesignMode) {
+                        if (selectedDesignMode == GraphicCardGenerator.ChampionDesignMode.FULL_BACKGROUND) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                previewScale = (previewScale * zoom).coerceIn(0.8f, 4f)
+                                previewOffset += pan
+                            }
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 if (isGenerating) {
@@ -340,7 +356,14 @@ fun ChampionPhotoStudioScreen(
                         Image(
                             bitmap = bmp.asImageBitmap(),
                             contentDescription = "Tarjeta de Campeón Oficial",
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer(
+                                    scaleX = if (selectedDesignMode == GraphicCardGenerator.ChampionDesignMode.FULL_BACKGROUND) previewScale else 1f,
+                                    scaleY = if (selectedDesignMode == GraphicCardGenerator.ChampionDesignMode.FULL_BACKGROUND) previewScale else 1f,
+                                    translationX = if (selectedDesignMode == GraphicCardGenerator.ChampionDesignMode.FULL_BACKGROUND) previewOffset.x else 0f,
+                                    translationY = if (selectedDesignMode == GraphicCardGenerator.ChampionDesignMode.FULL_BACKGROUND) previewOffset.y else 0f
+                                )
                         )
                     }
                 }

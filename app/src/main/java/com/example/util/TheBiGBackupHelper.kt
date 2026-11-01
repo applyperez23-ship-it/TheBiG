@@ -214,9 +214,18 @@ object TheBiGBackupHelper {
     }
 
     /**
-     * Dedicated 'TheBiG' folder in internal / external storage for backups and assets.
+     * Dedicated 'TheBiG' folder in physical app storage for backups and assets.
      */
     fun getTheBiGStorageDirectory(context: Context): File {
+        val extFiles = context.getExternalFilesDir("TheBiG")
+        if (extFiles != null) {
+            if (!extFiles.exists()) {
+                extFiles.mkdirs()
+            }
+            if (extFiles.exists() && extFiles.canWrite()) {
+                return extFiles
+            }
+        }
         val extDocs = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)
         val theBiGDir = File(extDocs, "TheBiG")
         if (!theBiGDir.exists()) {

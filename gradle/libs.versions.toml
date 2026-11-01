@@ -10,6 +10,7 @@ ksp = "2.0.21-1.0.27"
 coil = "2.7.0"
 materialIconsExtended = "1.7.6"
 navigationCompose = "2.8.5"
+camerax = "1.4.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -30,6 +31,10 @@ androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = 
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 zxing-core = { group = "com.google.zxing", name = "core", version = "3.5.3" }
+camerax-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
+camerax-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
+camerax-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
+camerax-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
