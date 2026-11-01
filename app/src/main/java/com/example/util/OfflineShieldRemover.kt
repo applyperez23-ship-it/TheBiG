@@ -152,8 +152,7 @@ object OfflineShieldRemover {
     }
 
     /**
-     * Interpolates brush between previous and current touch points to produce
-     * fluid continuous lines without gaps during fast drag motions.
+     * Applies manual erase or paint along an interpolated line between two drag coordinates.
      */
     fun applyBrushLine(
         bitmap: Bitmap,
@@ -162,22 +161,22 @@ object OfflineShieldRemover {
         endX: Float,
         endY: Float,
         radius: Float,
-        isErase: Boolean,
-        paintColor: Int = Color.WHITE
+        isErase: Boolean = true,
+        paintColor: Int = Color.BLACK
     ) {
         val canvas = Canvas(bitmap)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            strokeWidth = radius * 2f
-            strokeCap = Paint.Cap.ROUND
+        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             if (isErase) {
                 xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
             } else {
                 color = paintColor
-                style = Paint.Style.STROKE
             }
+            strokeWidth = radius * 2f
+            strokeCap = Paint.Cap.ROUND
+            style = Paint.Style.STROKE
         }
-        canvas.drawLine(startX, startY, endX, endY, paint)
-        // Also draw end circle
+        canvas.drawLine(startX, startY, endX, endY, linePaint)
+
         val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             if (isErase) {
                 xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
@@ -186,7 +185,129 @@ object OfflineShieldRemover {
                 style = Paint.Style.FILL
             }
         }
+        canvas.drawCircle(startX, startY, radius, circlePaint)
         canvas.drawCircle(endX, endY, radius, circlePaint)
+    }
+
+    /**
+     * Magic Wand tool: starts flood-fill at touch point (touchX, touchY) erasing
+     * all connected pixels that match the tapped color within tolerance.
+     */
+    fun magicWandFloodFill(
+        bitmap: Bitmap,
+        touchX: Float,
+        touchY: Float,
+        tolerancePercentage: Int = 20
+    ) {
+        val width = bitmap.width
+        val height = bitmap.height
+        val startX = touchX.toInt().coerceIn(0, width - 1)
+        val startY = touchY.toInt().coerceIn(0, height - 1)
+
+        val targetColor = bitmap.getPixel(startX, startY)
+        if (Color.alpha(targetColor) == 0) return
+
+        val tr = Color.red(targetColor)
+        val tg = Color.green(targetColor)
+        val tb = Color.blue(targetColor)
+
+        val maxDist = 441.67f
+        val threshold = (tolerancePercentage / 100f) * maxDist
+
+        fun isColorMatch(c: Int): Boolean {
+            val a = Color.alpha(c)
+            if (a == 0) return false
+            val r = Color.red(c)
+            val g = Color.green(c)
+            val b = Color.blue(c)
+            val dist = sqrt(((r - tr) * (r - tr) + (g - tg) * (g - tg) + (b - tb) * (b - tb)).toDouble()).toFloat()
+            return dist <= threshold
+        }
+
+        val visited = BooleanArray(width * height)
+        val queue = IntArray(width * height)
+        var head = 0
+        var tail = 0
+
+        val startIdx = startY * width + startX
+        visited[startIdx] = true
+        queue[tail++] = startIdx
+
+        val dx = intArrayOf(1, -1, 0, 0)
+        val dy = intArrayOf(0, 0, 1, -1)
+
+        while (head < tail) {
+            val curr = queue[head++]
+            val cx = curr % width
+            val cy = curr / width
+            bitmap.setPixel(cx, cy, Color.TRANSPARENT)
+
+            for (i in 0 until 4) {
+                val nx = cx + dx[i]
+                val ny = cy + dy[i]
+                if (nx in 0 until width && ny in 0 until height) {
+                    val nIdx = ny * width + nx
+                    if (!visited[nIdx]) {
+                        visited[nIdx] = true
+                        val pixel = bitmap.getPixel(nx, ny)
+                        if (isColorMatch(pixel)) {
+                            queue[tail++] = nIdx
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Pencil tool: restores exact original pixels from originalBitmap into the working bitmap.
+     */
+    fun restoreOriginalPixels(
+        bitmap: Bitmap,
+        originalBitmap: Bitmap,
+        cx: Float,
+        cy: Float,
+        radius: Float
+    ) {
+        val width = bitmap.width
+        val height = bitmap.height
+        val minX = (cx - radius).toInt().coerceIn(0, width - 1)
+        val maxX = (cx + radius).toInt().coerceIn(0, width - 1)
+        val minY = (cy - radius).toInt().coerceIn(0, height - 1)
+        val maxY = (cy + radius).toInt().coerceIn(0, height - 1)
+        val r2 = radius * radius
+
+        for (y in minY..maxY) {
+            for (x in minX..maxX) {
+                val dx = x - cx
+                val dy = y - cy
+                if (dx * dx + dy * dy <= r2) {
+                    bitmap.setPixel(x, y, originalBitmap.getPixel(x, y))
+                }
+            }
+        }
+    }
+
+    /**
+     * Restores original pixels along a continuous interpolated line between two drag points.
+     */
+    fun restoreOriginalPixelsLine(
+        bitmap: Bitmap,
+        originalBitmap: Bitmap,
+        startX: Float,
+        startY: Float,
+        endX: Float,
+        endY: Float,
+        radius: Float
+    ) {
+        val dist = sqrt(((endX - startX) * (endX - startX) + (endY - startY) * (endY - startY)).toDouble()).toFloat()
+        val steps = (dist / (radius * 0.5f)).toInt().coerceAtLeast(1)
+        for (i in 0..steps) {
+            val t = i.toFloat() / steps
+            val x = startX + (endX - startX) * t
+            val y = startY + (endY - startY) * t
+            restoreOriginalPixels(bitmap, originalBitmap, x, y, radius)
+        }
     }
 
     /**

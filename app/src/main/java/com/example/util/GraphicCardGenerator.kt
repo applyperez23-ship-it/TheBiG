@@ -30,7 +30,7 @@ object GraphicCardGenerator {
     /**
      * Generates a 1080x1080 px Instagram feed card for the Standings Table.
      */
-    fun generateStandingsBitmap(tournament: Tournament, standings: List<TeamStanding>): Bitmap {
+    fun generateStandingsBitmap(tournament: Tournament, standings: List<TeamStanding>, context: Context? = null): Bitmap {
         val bitmap = Bitmap.createBitmap(CARD_SIZE, CARD_SIZE, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
@@ -75,14 +75,15 @@ object GraphicCardGenerator {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             canvas.drawText("${index + 1}", 90f, rowY + 38f, paint)
 
-            // Team Crest Color Dot
-            val teamColor = try {
-                Color.parseColor(item.team.primaryColorHex)
-            } catch (e: Exception) {
-                Color.parseColor("#0284C7")
-            }
-            paint.color = teamColor
-            canvas.drawCircle(190f, rowY + 28f, 14f, paint)
+            // Team Crest (vector or custom) rendered crisp and centered
+            TeamCrestHelper.drawTeamShieldOnAndroidCanvas(
+                canvas = canvas,
+                cx = 190f,
+                cy = rowY + 28f,
+                radius = 18f,
+                team = item.team,
+                context = context
+            )
 
             // Team Name
             paint.color = Color.WHITE
@@ -494,12 +495,153 @@ enum class ChampionDesignMode {
         }
     }
 
-    fun generateStandingsInstagramBitmap(tournament: Tournament, standings: List<TeamStanding>): Bitmap =
-        generateStandingsBitmap(tournament, standings)
+    fun generateStandingsInstagramBitmap(tournament: Tournament, standings: List<TeamStanding>, context: Context? = null): Bitmap =
+        generateStandingsBitmap(tournament, standings, context)
 
     fun generateFixtureInstagramBitmap(tournament: Tournament, matches: List<Match>, teamMap: Map<Long, Team>): Bitmap =
         generateFixtureBitmap(tournament, matches, teamMap.values.toList())
 
     fun generateScorersInstagramBitmap(tournament: Tournament, scorers: List<ScorerStat>): Bitmap =
         generateScorersBitmap(tournament, scorers)
+
+    /**
+     * Generates a single unified leaders and tournament statistics card:
+     * - Top Scorers (Pichichi)
+     * - Top Assisters
+     * - Best Goalkeepers (Valla menos vencida)
+     * - Team Goals
+     * - Auto-calculated MVP badge in corner based on actual tournament statistics
+     */
+    fun generateUnifiedLeadersBitmap(
+        tournament: Tournament,
+        scorers: List<ScorerStat>,
+        assisters: List<com.example.domain.rules.AssisterStat>,
+        goalkeepers: List<com.example.domain.rules.GoalkeeperStat>,
+        standings: List<TeamStanding>,
+        context: Context? = null
+    ): Bitmap {
+        val bitmap = Bitmap.createBitmap(CARD_SIZE, CARD_SIZE, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        drawInstagramBackground(canvas)
+        drawWatermarkAndBranding(canvas, tournament.name, "LÍDERES Y ESTADÍSTICAS DEL TORNEO")
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        // Calculate MVP automatically: goals * 2.0 + assists * 1.5 + cleanSheets * 2.0
+        val candidateScores = mutableMapOf<Player, Pair<Double, Team?>>()
+        scorers.forEach { s ->
+            val cur = candidateScores[s.player]?.first ?: 0.0
+            candidateScores[s.player] = Pair(cur + s.goals * 2.0, s.team)
+        }
+        assisters.forEach { a ->
+            val cur = candidateScores[a.player]?.first ?: 0.0
+            candidateScores[a.player] = Pair(cur + a.assists * 1.5, a.team)
+        }
+        val topMvpEntry = candidateScores.maxByOrNull { it.value.first }
+        val mvpPlayer = topMvpEntry?.key
+        val mvpTeam = topMvpEntry?.value?.second
+
+        // Corner highlighted MVP Badge
+        val mvpBoxRect = RectF(660f, 60f, 1020f, 190f)
+        paint.color = Color.parseColor("#1E1B4B")
+        paint.style = Paint.Style.FILL
+        canvas.drawRoundRect(mvpBoxRect, 16f, 16f, paint)
+
+        paint.color = Color.parseColor("#F59E0B")
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 3f
+        canvas.drawRoundRect(mvpBoxRect, 16f, 16f, paint)
+
+        paint.style = Paint.Style.FILL
+        paint.textSize = 20f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        canvas.drawText("★ MVP DEL TORNEO ★", 680f, 96f, paint)
+
+        paint.color = Color.WHITE
+        paint.textSize = 24f
+        val mvpName = mvpPlayer?.name ?: "En disputa"
+        canvas.drawText(mvpName.take(18), 680f, 134f, paint)
+
+        paint.color = Color.parseColor("#94A3B8")
+        paint.textSize = 18f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        canvas.drawText(mvpTeam?.name ?: "", 680f, 166f, paint)
+
+        // 4 Section Cards helper
+        fun drawSection(title: String, left: Float, top: Float, right: Float, bottom: Float, items: List<Triple<String, String, String>>) {
+            paint.color = Color.parseColor("#151D2A")
+            paint.style = Paint.Style.FILL
+            canvas.drawRoundRect(RectF(left, top, right, bottom), 16f, 16f, paint)
+
+            paint.color = Color.parseColor("#F59E0B")
+            paint.textSize = 24f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas.drawText(title, left + 20f, top + 40f, paint)
+
+            var y = top + 80f
+            items.take(3).forEachIndexed { idx, (name, sub, metric) ->
+                paint.color = if (idx == 0) Color.parseColor("#F59E0B") else Color.parseColor("#94A3B8")
+                paint.textSize = 20f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                canvas.drawText("${idx + 1}.", left + 20f, y, paint)
+
+                paint.color = Color.WHITE
+                paint.textSize = 21f
+                canvas.drawText(name.take(15), left + 50f, y, paint)
+
+                paint.color = Color.parseColor("#64748B")
+                paint.textSize = 16f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                canvas.drawText(sub.take(12), left + 50f, y + 22f, paint)
+
+                paint.color = Color.parseColor("#F59E0B")
+                paint.textSize = 22f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                canvas.drawText(metric, right - 90f, y + 10f, paint)
+
+                y += 56f
+            }
+        }
+
+        val col1Left = 60f
+        val col1Right = 520f
+        val col2Left = 560f
+        val col2Right = 1020f
+
+        // Top Row: Scorers & Assisters
+        val row1Top = 230f
+        val row1Bottom = 580f
+        drawSection(
+            "⚽ GOLEADORES",
+            col1Left, row1Top, col1Right, row1Bottom,
+            scorers.map { Triple(it.player.name, it.team?.shortName ?: "", "${it.goals} G") }
+        )
+        drawSection(
+            "🎯 ASISTIDORES",
+            col2Left, row1Top, col2Right, row1Bottom,
+            assisters.map { Triple(it.player.name, it.team?.shortName ?: "", "${it.assists} A") }
+        )
+
+        // Bottom Row: Best GK & Team Goals
+        val row2Top = 610f
+        val row2Bottom = 960f
+        drawSection(
+            "🧤 VALLA MENOS VENCIDA",
+            col1Left, row2Top, col1Right, row2Bottom,
+            goalkeepers.map { Triple(it.player.name, it.team?.shortName ?: "", "${it.goalsConceded} GC") }
+        )
+
+        val teamGoals = standings.sortedByDescending { it.gf }.map {
+            Triple(it.team.name, "${it.pj} PJ", "${it.gf} GF")
+        }
+        drawSection(
+            "🔥 GOLES POR EQUIPO",
+            col2Left, row2Top, col2Right, row2Bottom,
+            teamGoals
+        )
+
+        drawFooterBrand(canvas)
+        return bitmap
+    }
 }

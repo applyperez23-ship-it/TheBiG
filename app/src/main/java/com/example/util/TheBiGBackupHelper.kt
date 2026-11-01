@@ -16,6 +16,10 @@ import com.example.data.local.entity.Team
 import com.example.data.local.entity.Tournament
 import com.example.data.repository.TheBiGRepository
 import com.google.zxing.BarcodeFormat
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.MultiFormatReader
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeWriter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -70,6 +74,24 @@ object TheBiGBackupHelper {
             }
         }
         return bitmap
+    }
+
+    /**
+     * Decodes QR code content from an Android Bitmap safely.
+     */
+    fun decodeQrFromBitmap(bitmap: Bitmap): String? {
+        return try {
+            val width = bitmap.width
+            val height = bitmap.height
+            val pixels = IntArray(width * height)
+            bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+            val source = RGBLuminanceSource(width, height, pixels)
+            val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+            val reader = MultiFormatReader()
+            reader.decode(binaryBitmap).text
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /**
@@ -171,6 +193,15 @@ object TheBiGBackupHelper {
 
             writeTbZipFile(zipFile, root.toString(2), crestsToZip)
 
+            // Centralize a persistent copy in dedicated TheBiG directory
+            try {
+                val theBiGDir = getTheBiGStorageDirectory(context)
+                val targetFile = File(theBiGDir, fileName)
+                zipFile.copyTo(targetFile, overwrite = true)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
             FileProvider.getUriForFile(
                 context,
                 "com.aistudio.thebig.ftbol.fileprovider",
@@ -180,6 +211,22 @@ object TheBiGBackupHelper {
             e.printStackTrace()
             null
         }
+    }
+
+    /**
+     * Dedicated 'TheBiG' folder in internal / external storage for backups and assets.
+     */
+    fun getTheBiGStorageDirectory(context: Context): File {
+        val extDocs = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS)
+        val theBiGDir = File(extDocs, "TheBiG")
+        if (!theBiGDir.exists()) {
+            theBiGDir.mkdirs()
+        }
+        if (theBiGDir.exists() && theBiGDir.canWrite()) {
+            return theBiGDir
+        }
+        val fallback = File(context.filesDir, "TheBiG").apply { if (!exists()) mkdirs() }
+        return fallback
     }
 
     /**
@@ -222,6 +269,14 @@ object TheBiGBackupHelper {
             val zipFile = File(exportDir, fileName)
 
             writeTbZipFile(zipFile, root.toString(2), crestsToZip)
+
+            try {
+                val theBiGDir = getTheBiGStorageDirectory(context)
+                val targetFile = File(theBiGDir, fileName)
+                zipFile.copyTo(targetFile, overwrite = true)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
 
             FileProvider.getUriForFile(
                 context,
@@ -301,6 +356,14 @@ object TheBiGBackupHelper {
             val zipFile = File(exportDir, fileName)
 
             writeTbZipFile(zipFile, root.toString(2), crestsToZip)
+
+            try {
+                val theBiGDir = getTheBiGStorageDirectory(context)
+                val targetFile = File(theBiGDir, fileName)
+                zipFile.copyTo(targetFile, overwrite = true)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
 
             FileProvider.getUriForFile(
                 context,

@@ -96,9 +96,8 @@ import com.example.util.TeamJerseyView
 fun MatchLiveSheetScreen(
     matchId: Long,
     viewModel: MatchViewModel,
-    onBack: () -> Unit
+    onBack: (tournamentId: Long?) -> Unit
 ) {
-    BackHandler { onBack() }
     val context = LocalContext.current
     val app = TheBiGApp.instance
 
@@ -106,6 +105,7 @@ fun MatchLiveSheetScreen(
     var homeTeam by remember { mutableStateOf<Team?>(null) }
     var awayTeam by remember { mutableStateOf<Team?>(null) }
     var tournament by remember { mutableStateOf<Tournament?>(null) }
+    BackHandler { onBack(tournament?.id ?: match?.tournamentId) }
     var homePlayers by remember { mutableStateOf<List<Player>>(emptyList()) }
     var awayPlayers by remember { mutableStateOf<List<Player>>(emptyList()) }
     var events by remember { mutableStateOf<List<MatchEvent>>(emptyList()) }
@@ -199,7 +199,7 @@ fun MatchLiveSheetScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { onBack(tournament?.id ?: match?.tournamentId) }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Regresar")
                     }
                 },

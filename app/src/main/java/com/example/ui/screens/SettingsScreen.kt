@@ -129,6 +129,36 @@ fun SettingsScreen(
     var isCheckingUpdates by remember { mutableStateOf(false) }
     var showQrShareDialog by remember { mutableStateOf(false) }
 
+    val qrImagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                    inputStream?.close()
+                    if (bitmap != null) {
+                        val decoded = TheBiGBackupHelper.decodeQrFromBitmap(bitmap)
+                        if (!decoded.isNullOrBlank()) {
+                            if (decoded.startsWith("{") || decoded.startsWith("UEsD")) {
+                                importTbText = decoded
+                                showImportDialog = true
+                                Toast.makeText(context, "Paquete .tb detectado desde el QR", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Contenido QR: $decoded", Toast.LENGTH_LONG).show()
+                            }
+                        } else {
+                            Toast.makeText(context, "No se detectó un código QR válido en la imagen seleccionada", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Error al decodificar la imagen QR", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -517,15 +547,34 @@ fun SettingsScreen(
                         }
                     }
 
-                    Button(
-                        onClick = { showQrShareDialog = true },
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                        shape = RoundedCornerShape(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Modo Espectador en Vivo (QR)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = { showQrShareDialog = true },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Ver QR", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                qrImagePickerLauncher.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Escanear QR", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
 
                     backupStatus?.let { status ->
@@ -960,13 +1009,13 @@ fun SettingsScreen(
                     } else {
                         Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(40.dp))
                         Text(
-                            text = "TheBiG está actualizado a la versión v1.7.0.",
+                            text = "TheBiG está actualizado a la versión v1.8.0.",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             textAlign = TextAlign.Center
                         )
                         Text(
-                            text = "Cuentas con el motor matemático de los 4 modos de torneo, formato .tb ZIP exclusivo, cronómetro de árbitro estático y editor de escudos con interpolación táctil.",
+                            text = "Cuentas con el motor de torneos definitivo (4 modos), formato .tb optimizado en carpeta TheBiG, cronómetro con tiempo real, editor de escudos con varita mágica y estudio de campeón profesional.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
@@ -982,7 +1031,7 @@ fun SettingsScreen(
         )
     }
 
-    // QR Spectator Dialog with Network Verification
+    // QR Spectator Dialog with Network Verification and Offline Guide
     if (showQrShareDialog) {
         val isNetworkOk = remember { TheBiGBackupHelper.isNetworkAvailable(context) }
         val qrBitmap = remember {
@@ -1004,22 +1053,27 @@ fun SettingsScreen(
             },
             text = {
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (!isNetworkOk) {
                         Card(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp)
                         ) {
-                            Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Sin conexión a internet / Wi-Fi", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                                }
                                 Text(
-                                    text = "Sin conexión a internet: los espectadores en otros dispositivos no podrán sincronizar partidos en vivo.",
+                                    text = "• Conecta ambos teléfonos a la misma red Wi-Fi o activa 'Zona Wi-Fi Portátil' (Hotspot) en este móvil.\n• Alternativa: Exporta el torneo en archivo .tb y compártelo por WhatsApp o Bluetooth sin internet.",
                                     fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.error
+                                    color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }
                         }

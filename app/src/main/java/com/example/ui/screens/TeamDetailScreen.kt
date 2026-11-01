@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -77,11 +78,13 @@ import com.example.data.local.entity.Player
 import com.example.data.local.entity.Team
 import com.example.ui.components.DeleteConfirmationDialog
 import com.example.ui.viewmodel.TeamViewModel
+import com.example.TheBiGApp
 import com.example.util.ImageEnhancer
 import com.example.util.JerseyPatternType
 import com.example.util.TeamCrestHelper
 import com.example.util.TeamCrestView
 import com.example.util.TeamJerseyView
+import com.example.util.TheBiGBackupHelper
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,6 +94,7 @@ fun TeamDetailScreen(
     viewModel: TeamViewModel,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val teams by viewModel.teams.collectAsStateWithLifecycle()
     val team = teams.firstOrNull { it.id == teamId }
 
@@ -142,6 +146,18 @@ fun TeamDetailScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                val uri = TheBiGBackupHelper.exportSingleTeamTbFile(context, TheBiGApp.instance.repository, team.id)
+                                if (uri != null) {
+                                    TheBiGBackupHelper.shareTbFile(context, uri, "Club ${team.name}")
+                                }
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = "Exportar Club (.tb)")
+                    }
                     IconButton(onClick = { showEditTeamDialog = true }) {
                         Icon(Icons.Default.Edit, contentDescription = "Editar Uniforme y Escudo")
                     }

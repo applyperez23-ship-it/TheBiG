@@ -17,16 +17,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.PlayArrow
@@ -34,6 +39,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -46,14 +52,20 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.KeyboardType
+import com.example.R
+import com.example.util.TeamJerseyView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -118,6 +130,8 @@ fun TournamentDetailScreen(
 
     var showEnrollDialog by remember { mutableStateOf(false) }
     var showChampionDialog by remember { mutableStateOf(false) }
+    var showCelebrationDialog by remember { mutableStateOf(false) }
+    var selectedMatchForSquad by remember { mutableStateOf<Match?>(null) }
     val scope = rememberCoroutineScope()
 
     val app = TheBiGApp.instance
@@ -209,12 +223,7 @@ fun TournamentDetailScreen(
                     IconButton(
                         onClick = {
                             if (tournament.championTeamId != null) {
-                                val champ = enrolledTeams.firstOrNull { it.id == tournament.championTeamId }
-                                if (champ != null) {
-                                    onOpenChampionStudio(champ)
-                                } else {
-                                    showChampionDialog = true
-                                }
+                                showCelebrationDialog = true
                             } else {
                                 showChampionDialog = true
                             }
@@ -290,15 +299,17 @@ fun TournamentDetailScreen(
                         enrolledTeams = enrolledTeams,
                         onMatchClick = onMatchClick,
                         onExportTable = {
-                            val bmp = GraphicCardGenerator.generateStandingsInstagramBitmap(tournament, standings)
+                            val bmp = GraphicCardGenerator.generateStandingsInstagramBitmap(tournament, standings, context)
                             GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Tabla")
                         },
-                        onOpenEnroll = { showEnrollDialog = true }
+                        onOpenEnroll = { showEnrollDialog = true },
+                        onCelebrateChampion = { showCelebrationDialog = true }
                     )
                     1 -> FixtureTabContent(
                         tournament = tournament,
                         matches = matches,
                         enrolledTeams = enrolledTeams,
+                        players = players,
                         onGenerate = {
                             scope.launch {
                                 val newMatches = TournamentScheduler.generateSchedule(
@@ -312,7 +323,21 @@ fun TournamentDetailScreen(
                                 }
                             }
                         },
+                        onAdvancePhase = {
+                            scope.launch {
+                                val nextMatches = TournamentScheduler.advanceToNextPhase(
+                                    tournamentId = tournamentId,
+                                    tournamentType = tournament.tournamentType,
+                                    allMatches = matches,
+                                    enrolledTeams = enrolledTeams
+                                )
+                                for (m in nextMatches) {
+                                    app.repository.saveMatch(m)
+                                }
+                            }
+                        },
                         onMatchClick = onMatchClick,
+                        onShowRoster = { match -> selectedMatchForSquad = match },
                         onExportFixture = {
                             val teamMap = enrolledTeams.associateBy { it.id }
                             val bmp = GraphicCardGenerator.generateFixtureInstagramBitmap(tournament, matches, teamMap)
@@ -320,12 +345,26 @@ fun TournamentDetailScreen(
                         }
                     )
                     2 -> StatisticsTabContent(
+                        tournament = tournament,
                         topScorers = topScorers,
                         topAssisters = topAssisters,
                         goalkeepers = goalkeeperRankings,
+                        standings = standings,
+                        context = context,
                         onExportScorers = {
                             val bmp = GraphicCardGenerator.generateScorersInstagramBitmap(tournament, topScorers)
                             GraphicCardGenerator.shareBitmap(context, bmp, "Compartir Goleadores")
+                        },
+                        onExportUnifiedLeaders = {
+                            val bmp = GraphicCardGenerator.generateUnifiedLeadersBitmap(
+                                tournament = tournament,
+                                scorers = topScorers,
+                                assisters = topAssisters,
+                                goalkeepers = goalkeeperRankings,
+                                standings = standings,
+                                context = context
+                            )
+                            GraphicCardGenerator.shareBitmap(context, bmp, "Líderes Oficiales - ${tournament.name}")
                         }
                     )
                     3 -> IsolatedFinancesTabContent(
@@ -345,6 +384,15 @@ fun TournamentDetailScreen(
                                     prizeRunnerUpAmount = ru,
                                     prizeTopScorerAmount = sc,
                                     prizeBestGkAmount = gk
+                                )
+                            )
+                        },
+                        onUpdateCardFines = { yellow, red, mvpPool ->
+                            viewModel.updateTournament(
+                                tournament.copy(
+                                    yellowCardFine = yellow,
+                                    redCardFine = red,
+                                    prizeMvpEnabled = mvpPool
                                 )
                             )
                         }
@@ -378,6 +426,42 @@ fun TournamentDetailScreen(
             }
         )
     }
+
+    if (showCelebrationDialog && tournament.championTeamId != null) {
+        val champ = enrolledTeams.firstOrNull { it.id == tournament.championTeamId }
+        val runnerUp = enrolledTeams.firstOrNull { it.id == tournament.runnerUpTeamId }
+        if (champ != null) {
+            ChampionCelebrationDialog(
+                tournament = tournament,
+                championTeam = champ,
+                runnerUpTeam = runnerUp,
+                onOpenStudio = {
+                    showCelebrationDialog = false
+                    onOpenChampionStudio(champ)
+                },
+                onChangeChampion = {
+                    showCelebrationDialog = false
+                    showChampionDialog = true
+                },
+                onDismiss = { showCelebrationDialog = false }
+            )
+        }
+    }
+
+    selectedMatchForSquad?.let { m ->
+        val homeT = enrolledTeams.firstOrNull { it.id == m.homeTeamId }
+        val awayT = enrolledTeams.firstOrNull { it.id == m.awayTeamId }
+        val hPlayers = players.filter { it.teamId == m.homeTeamId }
+        val aPlayers = players.filter { it.teamId == m.awayTeamId }
+        MatchSquadRosterDialog(
+            match = m,
+            homeTeam = homeT,
+            awayTeam = awayT,
+            homePlayers = hPlayers,
+            awayPlayers = aPlayers,
+            onDismiss = { selectedMatchForSquad = null }
+        )
+    }
 }
 
 @Composable
@@ -388,7 +472,8 @@ private fun StandingsTabContent(
     enrolledTeams: List<Team>,
     onMatchClick: (Long) -> Unit,
     onExportTable: () -> Unit,
-    onOpenEnroll: () -> Unit
+    onOpenEnroll: () -> Unit,
+    onCelebrateChampion: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -419,6 +504,45 @@ private fun StandingsTabContent(
                 Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Inscribir Clubes", fontSize = 12.sp)
+            }
+        }
+
+        if (tournament.championTeamId != null) {
+            val champTeam = enrolledTeams.firstOrNull { it.id == tournament.championTeamId }
+            if (champTeam != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onCelebrateChampion() },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF59E0B).copy(alpha = 0.15f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TeamCrestView(team = champTeam, size = 36.dp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("¡CAMPEÓN DEL TORNEO!", fontWeight = FontWeight.Black, fontSize = 11.sp, color = Color(0xFFF59E0B))
+                                Text(champTeam.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            }
+                        }
+                        Button(
+                            onClick = onCelebrateChampion,
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B))
+                        ) {
+                            Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Celebrar", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color.Black)
+                        }
+                    }
+                }
             }
         }
 
@@ -554,11 +678,17 @@ private fun FixtureTabContent(
     tournament: com.example.data.local.entity.Tournament,
     matches: List<Match>,
     enrolledTeams: List<Team>,
+    players: List<Player>,
     onGenerate: () -> Unit,
+    onAdvancePhase: () -> Unit,
     onMatchClick: (Long) -> Unit,
+    onShowRoster: (Match) -> Unit,
     onExportFixture: () -> Unit
 ) {
     val teamMap = remember(enrolledTeams) { enrolledTeams.associateBy { it.id } }
+    val canAdvance = remember(tournament, matches) {
+        TournamentScheduler.canAdvanceToNextPhase(tournament.tournamentType, matches)
+    }
 
     Column(
         modifier = Modifier
@@ -591,6 +721,37 @@ private fun FixtureTabContent(
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Generar Calendario", fontSize = 12.sp)
+                }
+            }
+        }
+
+        // Siguiente Fase Interactive Button
+        if (canAdvance) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF10B981).copy(alpha = 0.18f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("¡FASE ACTUAL CONCLUIDA!", fontWeight = FontWeight.Black, fontSize = 12.sp, color = Color(0xFF10B981))
+                        Text("Todos los cruces fueron completados. Avanza a la siguiente etapa.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Button(
+                        onClick = onAdvancePhase,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Siguiente Fase", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -636,8 +797,22 @@ private fun FixtureTabContent(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(match.roundName, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(match.roundName, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    IconButton(
+                                        onClick = { onShowRoster(match) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.FormatListNumbered,
+                                            contentDescription = "Alineación",
+                                            modifier = Modifier.size(15.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     TeamCrestView(team = homeTeam, size = 24.dp)
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -689,10 +864,14 @@ private fun FixtureTabContent(
 
 @Composable
 private fun StatisticsTabContent(
+    tournament: com.example.data.local.entity.Tournament,
     topScorers: List<com.example.domain.rules.ScorerStat>,
     topAssisters: List<com.example.domain.rules.AssisterStat>,
     goalkeepers: List<com.example.domain.rules.GoalkeeperStat>,
-    onExportScorers: () -> Unit
+    standings: List<TeamStanding>,
+    context: android.content.Context,
+    onExportScorers: () -> Unit,
+    onExportUnifiedLeaders: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -707,14 +886,22 @@ private fun StatisticsTabContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Líderes y Distinciones", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Button(
-                onClick = onExportScorers,
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-            ) {
-                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Compartir Goleadores", fontSize = 12.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(
+                    onClick = onExportUnifiedLeaders,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B))
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Black)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Líderes 1:1", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color.Black)
+                }
+                OutlinedButton(
+                    onClick = onExportScorers,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Goleadores", fontSize = 11.sp)
+                }
             }
         }
 
@@ -811,7 +998,7 @@ private fun StatisticsTabContent(
 }
 
 /**
- * Isolated Finances Tab with auto-balancing 100% prizes and player fee checklist.
+ * Isolated Finances Tab with auto-balancing 100% prizes, card fines, and instant reaction player fee checklist.
  */
 @Composable
 private fun IsolatedFinancesTabContent(
@@ -820,7 +1007,8 @@ private fun IsolatedFinancesTabContent(
     players: List<Player>,
     crossRefs: List<TournamentTeamCrossRef>,
     onTogglePlayerFee: (playerId: Long, current: Boolean) -> Unit,
-    onUpdatePrizes: (champion: Double, runnerUp: Double, scorer: Double, bestGk: Double) -> Unit
+    onUpdatePrizes: (champion: Double, runnerUp: Double, scorer: Double, bestGk: Double) -> Unit,
+    onUpdateCardFines: (yellow: Double, red: Double, mvpPool: Boolean) -> Unit
 ) {
     val totalTeams = enrolledTeams.size
     val totalCollected = if (tournament.financialModel == "BY_PLAYER") {
@@ -829,7 +1017,15 @@ private fun IsolatedFinancesTabContent(
         PrizeCalculator.roundToTen((if (tournament.totalTeamFee > 0) tournament.totalTeamFee else tournament.entryFee) * totalTeams)
     }
 
-    // Sliders for dynamic 100% hierarchical rebalancing (Campeón >= Subcampeón >= Resto)
+    // Local instant checkbox reaction map
+    val localFeeMap = remember { mutableStateMapOf<Long, Boolean>() }
+    LaunchedEffect(players) {
+        players.forEach { p ->
+            localFeeMap[p.id] = p.feePaid
+        }
+    }
+
+    // Sliders for dynamic 100% hierarchical rebalancing
     var percentages by remember(tournament) {
         val total = (tournament.prizeChampionAmount + tournament.prizeRunnerUpAmount + tournament.prizeTopScorerAmount + tournament.prizeBestGkAmount).coerceAtLeast(1.0)
         mutableStateOf<Map<PrizeCategory, Float>>(
@@ -841,6 +1037,10 @@ private fun IsolatedFinancesTabContent(
             )
         )
     }
+
+    var yellowFineText by remember(tournament.yellowCardFine) { mutableStateOf(tournament.yellowCardFine.toInt().toString()) }
+    var redFineText by remember(tournament.redCardFine) { mutableStateOf(tournament.redCardFine.toInt().toString()) }
+    var mvpPoolToggle by remember(tournament.prizeMvpEnabled) { mutableStateOf(tournament.prizeMvpEnabled) }
 
     Column(
         modifier = Modifier
@@ -875,7 +1075,7 @@ private fun IsolatedFinancesTabContent(
             }
         }
 
-        // Proportional Hierarchical Auto-balancing Sliders (Sum = 100%, Campeón >= Subcampeón)
+        // Proportional Hierarchical Auto-balancing Sliders
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
@@ -884,7 +1084,6 @@ private fun IsolatedFinancesTabContent(
             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Reparto Proporcional de Premios (Total 100%):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
 
-                // Champion Slider
                 PrizeSliderRow(
                     label = "Campeón",
                     percentage = percentages[PrizeCategory.CHAMPION] ?: 50f,
@@ -900,7 +1099,6 @@ private fun IsolatedFinancesTabContent(
                     }
                 )
 
-                // Runner Up Slider
                 PrizeSliderRow(
                     label = "Subcampeón",
                     percentage = percentages[PrizeCategory.RUNNER_UP] ?: 25f,
@@ -916,7 +1114,6 @@ private fun IsolatedFinancesTabContent(
                     }
                 )
 
-                // Top Scorer Slider
                 PrizeSliderRow(
                     label = "Goleador",
                     percentage = percentages[PrizeCategory.TOP_SCORER] ?: 15f,
@@ -932,7 +1129,6 @@ private fun IsolatedFinancesTabContent(
                     }
                 )
 
-                // Best GK Slider
                 PrizeSliderRow(
                     label = "Valla Menos Vencida",
                     percentage = percentages[PrizeCategory.BEST_GK] ?: 10f,
@@ -950,7 +1146,74 @@ private fun IsolatedFinancesTabContent(
             }
         }
 
-        // Player Fee Checklist
+        // Card Fines and Sanctions Section (Clean Backspace inputs)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+        ) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Tarjetas, Multas y Destino:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = yellowFineText,
+                        onValueChange = { input ->
+                            val clean = input.filter { it.isDigit() }
+                            yellowFineText = clean
+                            val yAmount = clean.toDoubleOrNull() ?: 0.0
+                            val rAmount = redFineText.toDoubleOrNull() ?: 0.0
+                            onUpdateCardFines(yAmount, rAmount, mvpPoolToggle)
+                        },
+                        label = { Text("Multa Amarilla ($)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = redFineText,
+                        onValueChange = { input ->
+                            val clean = input.filter { it.isDigit() }
+                            redFineText = clean
+                            val yAmount = yellowFineText.toDoubleOrNull() ?: 0.0
+                            val rAmount = clean.toDoubleOrNull() ?: 0.0
+                            onUpdateCardFines(yAmount, rAmount, mvpPoolToggle)
+                        },
+                        label = { Text("Multa Roja ($)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Destino de Multas al Pozo MVP", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        Text(
+                            text = if (mvpPoolToggle) "Las multas recaudadas suman al premio MVP del torneo" else "Las multas van al pozo general de premios",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = mvpPoolToggle,
+                        onCheckedChange = { checked ->
+                            mvpPoolToggle = checked
+                            val yAmount = yellowFineText.toDoubleOrNull() ?: 0.0
+                            val rAmount = redFineText.toDoubleOrNull() ?: 0.0
+                            onUpdateCardFines(yAmount, rAmount, checked)
+                        }
+                    )
+                }
+            }
+        }
+
+        // Player Fee Checklist with instant 0ms visual feedback
         Text("Control de Cuotas por Jugador:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
 
         if (enrolledTeams.isEmpty()) {
@@ -974,10 +1237,15 @@ private fun IsolatedFinancesTabContent(
                             Text("Sin jugadores en la plantilla", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         } else {
                             teamPlayers.forEach { p ->
+                                val isPaid = localFeeMap[p.id] ?: p.feePaid
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { onTogglePlayerFee(p.id, p.feePaid) }
+                                        .clickable {
+                                            val nextStatus = !isPaid
+                                            localFeeMap[p.id] = nextStatus
+                                            onTogglePlayerFee(p.id, isPaid)
+                                        }
                                         .padding(vertical = 2.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
@@ -985,12 +1253,18 @@ private fun IsolatedFinancesTabContent(
                                     Text("#${p.dorsal} ${p.name}", fontSize = 12.sp)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = if (p.feePaid) "Pagado" else "Pendiente",
+                                            text = if (isPaid) "Pagado" else "Pendiente",
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (p.feePaid) Color(0xFF10B981) else MaterialTheme.colorScheme.error
+                                            color = if (isPaid) Color(0xFF10B981) else MaterialTheme.colorScheme.error
                                         )
-                                        Checkbox(checked = p.feePaid, onCheckedChange = { onTogglePlayerFee(p.id, p.feePaid) })
+                                        Checkbox(
+                                            checked = isPaid,
+                                            onCheckedChange = { checked ->
+                                                localFeeMap[p.id] = checked
+                                                onTogglePlayerFee(p.id, isPaid)
+                                            }
+                                        )
                                     }
                                 }
                             }
@@ -1184,6 +1458,219 @@ private fun ChampionSelectDialog(
         },
         dismissButton = {
             OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@Composable
+private fun ChampionCelebrationDialog(
+    tournament: com.example.data.local.entity.Tournament,
+    championTeam: Team,
+    runnerUpTeam: Team?,
+    onOpenStudio: () -> Unit,
+    onChangeChampion: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = null,
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.thebig_champion_trophy_banner),
+                        contentDescription = "Trofeo de Campeón",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                }
+
+                Text(
+                    text = "¡FELICITACIONES AL EQUIPO CAMPEÓN!",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 15.sp,
+                    textAlign = TextAlign.Center,
+                    color = Color(0xFFF59E0B)
+                )
+
+                Text(
+                    text = tournament.name,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                TeamCrestView(team = championTeam, size = 64.dp)
+                Text(
+                    text = championTeam.name,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Campeón Oficial TheBiG",
+                    fontSize = 12.sp,
+                    color = Color(0xFF10B981),
+                    fontWeight = FontWeight.Bold
+                )
+
+                runnerUpTeam?.let { ru ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        TeamCrestView(team = ru, size = 26.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Subcampeón", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                            Text(ru.name, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Button(
+                    onClick = onOpenStudio,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B))
+                ) {
+                    Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = Color.Black)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Ir al Estudio de Campeón", fontWeight = FontWeight.Black, color = Color.Black)
+                }
+
+                OutlinedButton(
+                    onClick = onChangeChampion,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Reasignar Campeón", fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) { Text("Cerrar") }
+        }
+    )
+}
+
+@Composable
+private fun MatchSquadRosterDialog(
+    match: Match,
+    homeTeam: Team?,
+    awayTeam: Team?,
+    homePlayers: List<Player>,
+    awayPlayers: List<Player>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(match.roundName, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Text("Alineaciones y Plantillas", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Home Team Roster
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TeamCrestView(team = homeTeam, size = 26.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(homeTeam?.name ?: "Local", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                        if (homePlayers.isEmpty()) {
+                            Text("Sin jugadores registrados", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                        } else {
+                            homePlayers.forEach { p ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (homeTeam != null) {
+                                            TeamJerseyView(team = homeTeam, isGoalkeeper = p.isGoalkeeper, dorsal = p.dorsal, size = 26.dp)
+                                        } else {
+                                            TeamJerseyView(primaryColorHex = "#3B82F6", secondaryColorHex = "#1E293B", isGoalkeeper = p.isGoalkeeper, dorsal = p.dorsal, size = 26.dp)
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("#${p.dorsal} ${p.name}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                    }
+                                    Text(if (p.isGoalkeeper) "ARQUERO" else "CAMPO", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Away Team Roster
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TeamCrestView(team = awayTeam, size = 26.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(awayTeam?.name ?: "Visitante", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                        if (awayPlayers.isEmpty()) {
+                            Text("Sin jugadores registrados", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                        } else {
+                            awayPlayers.forEach { p ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (awayTeam != null) {
+                                            TeamJerseyView(team = awayTeam, isGoalkeeper = p.isGoalkeeper, dorsal = p.dorsal, size = 26.dp)
+                                        } else {
+                                            TeamJerseyView(primaryColorHex = "#EF4444", secondaryColorHex = "#FFFFFF", isGoalkeeper = p.isGoalkeeper, dorsal = p.dorsal, size = 26.dp)
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("#${p.dorsal} ${p.name}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                    }
+                                    Text(if (p.isGoalkeeper) "ARQUERO" else "CAMPO", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) { Text("Cerrar") }
         }
     )
 }

@@ -39,6 +39,7 @@ object ChampionStudioHelper {
 
     /**
      * Decodes an image URI with inSampleSize to safely bound max memory usage and avoid OOM.
+     * Automatically corrects EXIF rotation orientation and applies lighting enhancement.
      */
     suspend fun decodeSampledBitmapFromUri(
         context: Context,
@@ -58,9 +59,39 @@ object ChampionStudioHelper {
             options.inJustDecodeBounds = false
             options.inPreferredConfig = Bitmap.Config.ARGB_8888
 
-            context.contentResolver.openInputStream(imageUri)?.use { input ->
+            val decoded = context.contentResolver.openInputStream(imageUri)?.use { input ->
                 BitmapFactory.decodeStream(input, null, options)
+            } ?: return@withContext null
+
+            // Read EXIF orientation to prevent upside-down or sideways camera photos
+            val orientation = try {
+                context.contentResolver.openInputStream(imageUri)?.use { input ->
+                    val exif = android.media.ExifInterface(input)
+                    exif.getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL)
+                } ?: android.media.ExifInterface.ORIENTATION_NORMAL
+            } catch (e: Exception) {
+                android.media.ExifInterface.ORIENTATION_NORMAL
             }
+
+            val matrix = android.graphics.Matrix()
+            when (orientation) {
+                android.media.ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                android.media.ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                android.media.ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                android.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+                android.media.ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+            }
+
+            val orientedBitmap = if (!matrix.isIdentity) {
+                val rotated = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+                if (rotated != decoded) decoded.recycle()
+                rotated
+            } else {
+                decoded
+            }
+
+            // Professional illumination and clarity boost so photos never look dark
+            ImageEnhancer.enhanceCrestOrPhoto(orientedBitmap)
         } catch (e: Exception) {
             e.printStackTrace()
             null

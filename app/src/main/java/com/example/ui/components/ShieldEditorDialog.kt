@@ -87,7 +87,8 @@ fun ShieldEditorDialog(
 
     var tolerancePercentage by remember { mutableFloatStateOf(25f) }
     var brushRadius by remember { mutableFloatStateOf(16f) }
-    var selectedTool by remember { mutableStateOf("ERASER") } // ERASER, PENCIL
+    var zoomScale by remember { mutableFloatStateOf(1.0f) }
+    var selectedTool by remember { mutableStateOf("ERASER") } // ERASER, PENCIL, WAND
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
     fun pushUndo() {
@@ -140,7 +141,7 @@ fun ShieldEditorDialog(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Elimina fondos y retoca bordes con precisión",
+                            text = "Varita mágica, zoom y lápiz restaurador",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -150,7 +151,7 @@ fun ShieldEditorDialog(
                     }
                 }
 
-                // Interactive Canvas on Checkered Background
+                // Interactive Canvas on Checkered Background with Zoom
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -179,40 +180,79 @@ fun ShieldEditorDialog(
                             }
                         }
 
-                        // Draw current processed bitmap scaled to canvas
+                        // Draw current processed bitmap scaled to canvas and zoom
+                        val w = size.width * zoomScale
+                        val h = size.height * zoomScale
+                        val offsetX = (size.width - w) / 2f
+                        val offsetY = (size.height - h) / 2f
                         drawImage(
                             image = currentBitmap.asImageBitmap(),
-                            dstOffset = IntOffset.Zero,
-                            dstSize = IntSize(size.width.toInt(), size.height.toInt())
+                            dstOffset = IntOffset(offsetX.toInt(), offsetY.toInt()),
+                            dstSize = IntSize(w.toInt(), h.toInt())
                         )
                     }
 
-                    // Touch overlay with fluid stroke drag gestures
+                    // Touch overlay with fluid stroke drag gestures and wand click
                     var lastTouchX by remember { mutableFloatStateOf(-1f) }
                     var lastTouchY by remember { mutableFloatStateOf(-1f) }
+
+                    fun mapTouchToBitmap(touchX: Float, touchY: Float): Pair<Float, Float>? {
+                        if (canvasSize.width <= 0 || canvasSize.height <= 0) return null
+                        val w = canvasSize.width * zoomScale
+                        val h = canvasSize.height * zoomScale
+                        val offsetX = (canvasSize.width - w) / 2f
+                        val offsetY = (canvasSize.height - h) / 2f
+
+                        val relX = (touchX - offsetX) / w
+                        val relY = (touchY - offsetY) / h
+                        if (relX !in 0f..1f || relY !in 0f..1f) return null
+
+                        val bmpX = relX * currentBitmap.width
+                        val bmpY = relY * currentBitmap.height
+                        return Pair(bmpX, bmpY)
+                    }
 
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(selectedTool, brushRadius) {
+                            .pointerInput(selectedTool, brushRadius, zoomScale, tolerancePercentage) {
                                 detectDragGestures(
                                     onDragStart = { offset ->
                                         pushUndo()
                                         lastTouchX = offset.x
                                         lastTouchY = offset.y
-                                        if (canvasSize.width > 0 && canvasSize.height > 0) {
-                                            val bmpX = (offset.x / canvasSize.width) * currentBitmap.width
-                                            val bmpY = (offset.y / canvasSize.height) * currentBitmap.height
-                                            val scaledRadius = (brushRadius / canvasSize.width) * currentBitmap.width
-                                            OfflineShieldRemover.applyBrush(
-                                                bitmap = currentBitmap,
-                                                x = bmpX,
-                                                y = bmpY,
-                                                radius = scaledRadius.coerceAtLeast(2f),
-                                                isErase = selectedTool == "ERASER",
-                                                paintColor = AndroidColor.WHITE
-                                            )
-                                            renderTrigger++
+                                        val mapped = mapTouchToBitmap(offset.x, offset.y)
+                                        if (mapped != null) {
+                                            val (bmpX, bmpY) = mapped
+                                            val scaledRadius = (brushRadius / canvasSize.width) * currentBitmap.width / zoomScale
+
+                                            if (selectedTool == "WAND") {
+                                                OfflineShieldRemover.magicWandFloodFill(
+                                                    bitmap = currentBitmap,
+                                                    touchX = bmpX,
+                                                    touchY = bmpY,
+                                                    tolerancePercentage = tolerancePercentage.toInt()
+                                                )
+                                                renderTrigger++
+                                            } else if (selectedTool == "PENCIL") {
+                                                OfflineShieldRemover.restoreOriginalPixels(
+                                                    bitmap = currentBitmap,
+                                                    originalBitmap = baseBitmap,
+                                                    cx = bmpX,
+                                                    cy = bmpY,
+                                                    radius = scaledRadius.coerceAtLeast(2f)
+                                                )
+                                                renderTrigger++
+                                            } else {
+                                                OfflineShieldRemover.applyBrush(
+                                                    bitmap = currentBitmap,
+                                                    x = bmpX,
+                                                    y = bmpY,
+                                                    radius = scaledRadius.coerceAtLeast(2f),
+                                                    isErase = true
+                                                )
+                                                renderTrigger++
+                                            }
                                         }
                                     },
                                     onDragEnd = {
@@ -228,32 +268,67 @@ fun ShieldEditorDialog(
                                         val touchX = change.position.x
                                         val touchY = change.position.y
 
-                                        if (canvasSize.width > 0 && canvasSize.height > 0) {
-                                            val bmpX = (touchX / canvasSize.width) * currentBitmap.width
-                                            val bmpY = (touchY / canvasSize.height) * currentBitmap.height
-                                            val prevBmpX = if (lastTouchX >= 0) (lastTouchX / canvasSize.width) * currentBitmap.width else bmpX
-                                            val prevBmpY = if (lastTouchY >= 0) (lastTouchY / canvasSize.height) * currentBitmap.height else bmpY
-                                            val scaledRadius = (brushRadius / canvasSize.width) * currentBitmap.width
+                                        if (selectedTool != "WAND") {
+                                            val mapped = mapTouchToBitmap(touchX, touchY)
+                                            val mappedPrev = if (lastTouchX >= 0) mapTouchToBitmap(lastTouchX, lastTouchY) else mapped
 
-                                            OfflineShieldRemover.applyBrushLine(
-                                                bitmap = currentBitmap,
-                                                startX = prevBmpX,
-                                                startY = prevBmpY,
-                                                endX = bmpX,
-                                                endY = bmpY,
-                                                radius = scaledRadius.coerceAtLeast(2f),
-                                                isErase = selectedTool == "ERASER",
-                                                paintColor = AndroidColor.WHITE
-                                            )
+                                            if (mapped != null && mappedPrev != null) {
+                                                val (bmpX, bmpY) = mapped
+                                                val (prevBmpX, prevBmpY) = mappedPrev
+                                                val scaledRadius = (brushRadius / canvasSize.width) * currentBitmap.width / zoomScale
 
-                                            lastTouchX = touchX
-                                            lastTouchY = touchY
-                                            renderTrigger++
+                                                if (selectedTool == "PENCIL") {
+                                                    OfflineShieldRemover.restoreOriginalPixelsLine(
+                                                        bitmap = currentBitmap,
+                                                        originalBitmap = baseBitmap,
+                                                        startX = prevBmpX,
+                                                        startY = prevBmpY,
+                                                        endX = bmpX,
+                                                        endY = bmpY,
+                                                        radius = scaledRadius.coerceAtLeast(2f)
+                                                    )
+                                                } else {
+                                                    OfflineShieldRemover.applyBrushLine(
+                                                        bitmap = currentBitmap,
+                                                        startX = prevBmpX,
+                                                        startY = prevBmpY,
+                                                        endX = bmpX,
+                                                        endY = bmpY,
+                                                        radius = scaledRadius.coerceAtLeast(2f),
+                                                        isErase = true
+                                                    )
+                                                }
+
+                                                lastTouchX = touchX
+                                                lastTouchY = touchY
+                                                renderTrigger++
+                                            }
                                         }
                                     }
                                 )
                             }
                     )
+                }
+
+                // Zoom and Precision Controls
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Zoom: ${(zoomScale * 100).toInt()}%", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Slider(
+                        value = zoomScale,
+                        onValueChange = { zoomScale = it },
+                        valueRange = 1.0f..3.0f,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(
+                        onClick = { zoomScale = 1.0f },
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("100%", fontSize = 10.sp)
+                    }
                 }
 
                 // Tolerance Slider with auto color removal
@@ -303,23 +378,29 @@ fun ShieldEditorDialog(
                     )
                 }
 
-                // Manual Tools: Eraser vs Pencil, Undo and Reset
+                // Manual Tools: Eraser vs Pencil (Restores original) vs Wand, Undo and Reset
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilterChip(
                         selected = selectedTool == "ERASER",
                         onClick = { selectedTool = "ERASER" },
-                        label = { Text("Borrador", fontSize = 12.sp) },
-                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                        label = { Text("Goma", fontSize = 11.sp) },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(13.dp)) }
                     )
                     FilterChip(
                         selected = selectedTool == "PENCIL",
                         onClick = { selectedTool = "PENCIL" },
-                        label = { Text("Lápiz", fontSize = 12.sp) },
-                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                        label = { Text("Lápiz (Restaura)", fontSize = 11.sp) },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(13.dp)) }
+                    )
+                    FilterChip(
+                        selected = selectedTool == "WAND",
+                        onClick = { selectedTool = "WAND" },
+                        label = { Text("Varita", fontSize = 11.sp) },
+                        leadingIcon = { Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(13.dp)) }
                     )
 
                     Spacer(modifier = Modifier.weight(1f))
