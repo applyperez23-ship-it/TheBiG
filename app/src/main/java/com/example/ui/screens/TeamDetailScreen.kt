@@ -36,6 +36,9 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.SportsSoccer
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -107,6 +110,7 @@ fun TeamDetailScreen(
 
     var showAddPlayerDialog by remember { mutableStateOf(false) }
     var showEditTeamDialog by remember { mutableStateOf(false) }
+    var showTacticalPitch by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var playerToDelete by remember { mutableStateOf<Player?>(null) }
     var exportDialogData by remember { mutableStateOf<Triple<String, String, Any?>?>(null) }
@@ -116,6 +120,15 @@ fun TeamDetailScreen(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Club no encontrado")
         }
+        return
+    }
+
+    if (showTacticalPitch) {
+        TacticalPitchScreen(
+            team = team,
+            players = players,
+            onBack = { showTacticalPitch = false }
+        )
         return
     }
 
@@ -151,6 +164,11 @@ fun TeamDetailScreen(
                     }
                 },
                 actions = {
+                    // Pizarra Táctica Interactiva
+                    IconButton(onClick = { showTacticalPitch = true }) {
+                        Icon(Icons.Default.SportsSoccer, contentDescription = "Pizarra Táctica", tint = Color(0xFF10B981))
+                    }
+
                     // Export Squad Card
                     IconButton(
                         onClick = {
@@ -320,9 +338,9 @@ fun TeamDetailScreen(
             currentCount = players.size,
             existingDorsals = players.map { it.dorsal }.toSet(),
             onDismiss = { showAddPlayerDialog = false },
-            onConfirm = { name, dorsal, isGk, feePaid, isCaptain ->
+            onConfirm = { name, dorsal, isGk, feePaid, isCaptain, photoUri ->
                 scope.launch {
-                    val result = viewModel.addPlayer(team.id, name, dorsal, isGk, feePaid, isCaptain)
+                    val result = viewModel.addPlayer(team.id, name, dorsal, isGk, feePaid, isCaptain, photoUri)
                     if (result.isSuccess) {
                         showAddPlayerDialog = false
                     } else {
@@ -390,12 +408,41 @@ private fun PlayerRowCard(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TeamJerseyView(
-                team = team,
-                isGoalkeeper = player.isGoalkeeper,
-                dorsal = player.dorsal,
-                size = 38.dp
-            )
+            if (player.photoUri != null) {
+                val photoBmp = remember(player.photoUri) {
+                    try {
+                        val uri = Uri.parse(player.photoUri)
+                        val path = uri.path
+                        if (path != null && java.io.File(path).exists()) {
+                            android.graphics.BitmapFactory.decodeFile(path)
+                        } else null
+                    } catch (e: Exception) { null }
+                }
+                if (photoBmp != null) {
+                    androidx.compose.foundation.Image(
+                        bitmap = photoBmp.asImageBitmap(),
+                        contentDescription = player.name,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .border(1.5.dp, Color(0xFFF59E0B), CircleShape)
+                    )
+                } else {
+                    TeamJerseyView(
+                        team = team,
+                        isGoalkeeper = player.isGoalkeeper,
+                        dorsal = player.dorsal,
+                        size = 38.dp
+                    )
+                }
+            } else {
+                TeamJerseyView(
+                    team = team,
+                    isGoalkeeper = player.isGoalkeeper,
+                    dorsal = player.dorsal,
+                    size = 38.dp
+                )
+            }
 
             Spacer(modifier = Modifier.width(12.dp))
 
@@ -478,8 +525,9 @@ private fun AddPlayerDialog(
     currentCount: Int,
     existingDorsals: Set<Int>,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, dorsal: Int, isGk: Boolean, feePaid: Boolean, isCaptain: Boolean) -> Unit
+    onConfirm: (name: String, dorsal: Int, isGk: Boolean, feePaid: Boolean, isCaptain: Boolean, photoUri: String?) -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     val suggestedDorsal = remember {
         var num = 1
@@ -490,6 +538,24 @@ private fun AddPlayerDialog(
     var isGoalkeeper by remember { mutableStateOf(currentCount == 0) }
     var isCaptain by remember { mutableStateOf(false) }
     var feePaid by remember { mutableStateOf(false) }
+    var selectedPhotoUri by remember { mutableStateOf<String?>(null) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val dir = java.io.File(context.filesDir, "player_photos").apply { if (!exists()) mkdirs() }
+                val targetFile = java.io.File(dir, "player_${System.currentTimeMillis()}.png")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    java.io.FileOutputStream(targetFile).use { out -> input.copyTo(out) }
+                }
+                selectedPhotoUri = Uri.fromFile(targetFile).toString()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -514,6 +580,17 @@ private fun AddPlayerDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("player_dorsal_input")
                 )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Fotografía del Jugador:", fontWeight = FontWeight.SemiBold)
+                    OutlinedButton(onClick = { photoPickerLauncher.launch("image/*") }) {
+                        Text(if (selectedPhotoUri != null) "Foto Cargada ✓" else "Subir Foto", fontSize = 11.sp)
+                    }
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -548,7 +625,7 @@ private fun AddPlayerDialog(
                 onClick = {
                     val dNum = dorsal.toIntOrNull() ?: suggestedDorsal
                     if (name.isNotBlank()) {
-                        onConfirm(name, dNum, isGoalkeeper, feePaid, isCaptain)
+                        onConfirm(name, dNum, isGoalkeeper, feePaid, isCaptain, selectedPhotoUri)
                     }
                 },
                 enabled = name.isNotBlank(),

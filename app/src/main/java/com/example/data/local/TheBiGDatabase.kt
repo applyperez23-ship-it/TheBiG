@@ -17,6 +17,9 @@ import com.example.data.local.entity.Team
 import com.example.data.local.entity.Tournament
 import com.example.data.local.entity.TournamentTeamCrossRef
 
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+
 @Database(
     entities = [
         Tournament::class,
@@ -26,7 +29,7 @@ import com.example.data.local.entity.TournamentTeamCrossRef
         Match::class,
         MatchEvent::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class TheBiGDatabase : RoomDatabase() {
@@ -41,16 +44,28 @@ abstract class TheBiGDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: TheBiGDatabase? = null
 
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE players ADD COLUMN photoUri TEXT DEFAULT NULL")
+                database.execSQL("ALTER TABLE tournaments ADD COLUMN prizeTeamEnabled INTEGER NOT NULL DEFAULT 1")
+                database.execSQL("ALTER TABLE tournaments ADD COLUMN prizeTeamAmount REAL NOT NULL DEFAULT 0.0")
+            }
+        }
+
         fun getDatabase(context: Context): TheBiGDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     TheBiGDatabase::class.java,
                     "thebig_football.db"
-                ).fallbackToDestructiveMigration().build()
+                )
+                    .addMigrations(MIGRATION_6_7)
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }
         }
     }
 }
+

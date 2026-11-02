@@ -95,6 +95,44 @@ object TheBiGBackupHelper {
     }
 
     /**
+     * Converts an image file or content Uri to a Base64 string.
+     */
+    fun fileOrUriToBase64(context: Context, uriString: String?): String? {
+        if (uriString.isNullOrBlank()) return null
+        return try {
+            val uri = Uri.parse(uriString)
+            val bytes = if (uri.scheme == "content") {
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            } else {
+                val file = if (uri.scheme == "file") File(uri.path ?: "") else File(uriString)
+                if (file.exists()) file.readBytes() else null
+            }
+            if (bytes != null && bytes.isNotEmpty()) {
+                Base64.encodeToString(bytes, Base64.NO_WRAP)
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Decodes a Base64 string and writes it to a file in app storage, returning its file Uri string.
+     */
+    fun base64ToFileUri(context: Context, base64Str: String?, subDirName: String, prefix: String): String? {
+        if (base64Str.isNullOrBlank()) return null
+        return try {
+            val bytes = Base64.decode(base64Str, Base64.DEFAULT)
+            if (bytes == null || bytes.isEmpty()) return null
+            val dir = File(context.filesDir, subDirName).apply { if (!exists()) mkdirs() }
+            val file = File(dir, "${prefix}_${System.currentTimeMillis()}_${(1000..9999).random()}.png")
+            FileOutputStream(file).use { it.write(bytes) }
+            Uri.fromFile(file).toString()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
      * Exports a tournament to a proprietary .tb ZIP container:
      * Contains data.json + crests/ folder with PNG crest images.
      */
@@ -146,6 +184,11 @@ object TheBiGBackupHelper {
                     put("jerseyPattern", team.jerseyPattern)
                     put("goalkeeperColorHex", team.goalkeeperColorHex)
 
+                    val shieldB64 = fileOrUriToBase64(context, team.customShieldUri)
+                    if (shieldB64 != null) {
+                        put("customShieldBase64", shieldB64)
+                    }
+
                     if (team.customShieldUri != null) {
                         try {
                             val uri = Uri.parse(team.customShieldUri)
@@ -166,6 +209,27 @@ object TheBiGBackupHelper {
                 teamArr.put(obj)
             }
             root.put("teams", teamArr)
+
+            val teamIds = teams.map { it.id }
+            val players = repository.getPlayersForTeamsOnce(teamIds)
+            val playerArr = JSONArray()
+            for (p in players) {
+                val pObj = JSONObject().apply {
+                    put("id", p.id)
+                    put("teamId", p.teamId)
+                    put("name", p.name)
+                    put("dorsal", p.dorsal)
+                    put("isGoalkeeper", p.isGoalkeeper)
+                    put("isCaptain", p.isCaptain)
+                    put("feePaid", p.feePaid)
+                    val photoB64 = fileOrUriToBase64(context, p.photoUri)
+                    if (photoB64 != null) {
+                        put("photoBase64", photoB64)
+                    }
+                }
+                playerArr.put(pObj)
+            }
+            root.put("players", playerArr)
 
             val matches = repository.getMatchesForTournamentOnce(tournamentId)
             val matchesArr = JSONArray()
@@ -328,6 +392,10 @@ object TheBiGBackupHelper {
                 put("borderColorHex", team.borderColorHex)
                 put("jerseyPattern", team.jerseyPattern)
                 put("goalkeeperColorHex", team.goalkeeperColorHex)
+                val shieldB64 = fileOrUriToBase64(context, team.customShieldUri)
+                if (shieldB64 != null) {
+                    put("customShieldBase64", shieldB64)
+                }
             }
             root.put("team", teamObj)
 
@@ -338,6 +406,10 @@ object TheBiGBackupHelper {
                     put("dorsal", p.dorsal)
                     put("isGoalkeeper", p.isGoalkeeper)
                     put("isCaptain", p.isCaptain)
+                    val photoB64 = fileOrUriToBase64(context, p.photoUri)
+                    if (photoB64 != null) {
+                        put("photoBase64", photoB64)
+                    }
                 }
                 playersArr.put(pObj)
             }
@@ -556,15 +628,29 @@ object TheBiGBackupHelper {
             // Extract any custom shield images if present
             val teamArr = root.optJSONArray("teams")
             if (teamArr != null) {
-                val crestDir = File(context.filesDir, "team_shields").apply { if (!exists()) mkdirs() }
                 for (i in 0 until teamArr.length()) {
                     val tmObj = teamArr.getJSONObject(i)
                     if (tmObj.has("customShieldBase64")) {
                         val base64Str = tmObj.getString("customShieldBase64")
-                        val bytes = Base64.decode(base64Str, Base64.DEFAULT)
-                        val crestFile = File(crestDir, "imported_shield_${System.currentTimeMillis()}_$i.png")
-                        FileOutputStream(crestFile).use { it.write(bytes) }
-                        tmObj.put("customShieldUri", Uri.fromFile(crestFile).toString())
+                        val fileUri = base64ToFileUri(context, base64Str, "team_shields", "imported_shield")
+                        if (fileUri != null) {
+                            tmObj.put("customShieldUri", fileUri)
+                        }
+                    }
+                }
+            }
+
+            // Extract any player photos Base64 if present
+            val playerArr = root.optJSONArray("players")
+            if (playerArr != null) {
+                for (i in 0 until playerArr.length()) {
+                    val pObj = playerArr.getJSONObject(i)
+                    if (pObj.has("photoBase64")) {
+                        val base64Str = pObj.getString("photoBase64")
+                        val fileUri = base64ToFileUri(context, base64Str, "player_photos", "imported_player")
+                        if (fileUri != null) {
+                            pObj.put("photoUri", fileUri)
+                        }
                     }
                 }
             }
@@ -572,6 +658,10 @@ object TheBiGBackupHelper {
             // Handle SINGLE_TEAM import directly
             if (root.optString("type") == "SINGLE_TEAM" && root.has("team")) {
                 val teamObj = root.getJSONObject("team")
+                val customShield = if (teamObj.has("customShieldBase64")) {
+                    base64ToFileUri(context, teamObj.getString("customShieldBase64"), "team_shields", "imported_shield")
+                } else if (teamObj.has("customShieldUri")) teamObj.getString("customShieldUri") else null
+
                 val teamId = repository.saveTeam(
                     Team(
                         name = teamObj.getString("name"),
@@ -582,20 +672,26 @@ object TheBiGBackupHelper {
                         secondaryColorHex = teamObj.optString("secondaryColorHex", "#0F172A"),
                         borderColorHex = teamObj.optString("borderColorHex", "#FFFFFF"),
                         jerseyPattern = teamObj.optString("jerseyPattern", "STRIPES_VERTICAL"),
-                        goalkeeperColorHex = teamObj.optString("goalkeeperColorHex", "#10B981")
+                        goalkeeperColorHex = teamObj.optString("goalkeeperColorHex", "#10B981"),
+                        customShieldUri = customShield
                     )
                 )
                 val playersArr = root.optJSONArray("players")
                 if (playersArr != null) {
                     for (j in 0 until playersArr.length()) {
                         val pObj = playersArr.getJSONObject(j)
+                        val pPhoto = if (pObj.has("photoBase64")) {
+                            base64ToFileUri(context, pObj.getString("photoBase64"), "player_photos", "imported_player")
+                        } else if (pObj.has("photoUri")) pObj.getString("photoUri") else null
+
                         repository.savePlayer(
                             Player(
                                 teamId = teamId,
                                 name = pObj.getString("name"),
                                 dorsal = pObj.getInt("dorsal"),
                                 isGoalkeeper = pObj.optBoolean("isGoalkeeper", false),
-                                isCaptain = pObj.optBoolean("isCaptain", false)
+                                isCaptain = pObj.optBoolean("isCaptain", false),
+                                photoUri = pPhoto
                             )
                         )
                     }

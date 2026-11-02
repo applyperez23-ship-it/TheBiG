@@ -277,6 +277,7 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
             obj.put("borderColorHex", team.borderColorHex)
             obj.put("jerseyPattern", team.jerseyPattern)
             obj.put("goalkeeperColorHex", team.goalkeeperColorHex)
+            if (team.customShieldUri != null) obj.put("customShieldUri", team.customShieldUri)
             teamArr.put(obj)
         }
         root.put("teams", teamArr)
@@ -292,6 +293,7 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
             obj.put("isGoalkeeper", p.isGoalkeeper)
             obj.put("isCaptain", p.isCaptain)
             obj.put("feePaid", p.feePaid)
+            if (p.photoUri != null) obj.put("photoUri", p.photoUri)
             playerArr.put(obj)
         }
         root.put("players", playerArr)
@@ -341,9 +343,34 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
                     secondaryColorHex = obj.optString("secondaryColorHex", "#0F172A"),
                     borderColorHex = obj.optString("borderColorHex", "#FFFFFF"),
                     jerseyPattern = obj.optString("jerseyPattern", "SOLID"),
-                    goalkeeperColorHex = obj.optString("goalkeeperColorHex", "#10B981")
+                    goalkeeperColorHex = obj.optString("goalkeeperColorHex", "#10B981"),
+                    customShieldUri = if (obj.has("customShieldUri")) obj.getString("customShieldUri") else null
                 )
                 db.teamDao().insertTeam(tm)
+            }
+
+            val tObj = root.optJSONObject("tournament")
+            if (tObj != null) {
+                val t = Tournament(
+                    id = tObj.optLong("id", 0),
+                    name = tObj.getString("name"),
+                    edition = tObj.optString("edition", "1"),
+                    entryFee = tObj.optDouble("entryFee", 0.0),
+                    playersPerTeam = tObj.optInt("playersPerTeam", 7),
+                    matchDurationMinutes = tObj.optInt("matchDurationMinutes", 20),
+                    status = tObj.optString("status", "PLANNING"),
+                    tournamentType = tObj.optString("tournamentType", "LEAGUE"),
+                    awardTiming = tObj.optString("awardTiming", "END_OF_LEAGUE"),
+                    prizeChampionAmount = tObj.optDouble("prizeChampionAmount", 0.0),
+                    prizeRunnerUpAmount = tObj.optDouble("prizeRunnerUpAmount", 0.0),
+                    prizeTopScorerAmount = tObj.optDouble("prizeTopScorerAmount", 0.0),
+                    prizeTopAssisterAmount = tObj.optDouble("prizeTopAssisterAmount", 0.0),
+                    prizeBestGkAmount = tObj.optDouble("prizeBestGkAmount", 0.0),
+                    prizeMvpAmount = tObj.optDouble("prizeMvpAmount", 0.0),
+                    yellowCardFine = tObj.optDouble("yellowCardFine", 5.0),
+                    redCardFine = tObj.optDouble("redCardFine", 10.0)
+                )
+                db.tournamentDao().insertTournament(t)
             }
 
             for (i in 0 until playerArr.length()) {
@@ -355,11 +382,51 @@ class TheBiGRepository(private val db: TheBiGDatabase) {
                     dorsal = obj.getInt("dorsal"),
                     isGoalkeeper = obj.optBoolean("isGoalkeeper", false),
                     isCaptain = obj.optBoolean("isCaptain", false),
-                    feePaid = obj.optBoolean("feePaid", false)
+                    feePaid = obj.optBoolean("feePaid", false),
+                    photoUri = if (obj.has("photoUri")) obj.getString("photoUri") else null
                 )
                 db.playerDao().insertPlayer(p)
             }
+
+            val matchArr = root.optJSONArray("matches")
+            if (matchArr != null) {
+                for (i in 0 until matchArr.length()) {
+                    val obj = matchArr.getJSONObject(i)
+                    val m = Match(
+                        id = obj.optLong("id", 0),
+                        tournamentId = obj.optLong("tournamentId", if (tObj != null) tObj.optLong("id", 0) else 0),
+                        homeTeamId = obj.getLong("homeTeamId"),
+                        awayTeamId = obj.getLong("awayTeamId"),
+                        homeScore = obj.optInt("homeScore", 0),
+                        awayScore = obj.optInt("awayScore", 0),
+                        homePenalties = if (obj.has("homePenalties")) obj.getInt("homePenalties") else null,
+                        awayPenalties = if (obj.has("awayPenalties")) obj.getInt("awayPenalties") else null,
+                        roundName = obj.optString("roundName", "Jornada 1"),
+                        status = obj.optString("status", "SCHEDULED")
+                    )
+                    db.matchDao().insertMatch(m)
+                }
+            }
+
+            if (tObj != null) {
+                val tId = tObj.optLong("id", 0)
+                for (i in 0 until teamArr.length()) {
+                    val tmObj = teamArr.getJSONObject(i)
+                    val tmId = tmObj.optLong("id", 0)
+                    if (tId > 0 && tmId > 0) {
+                        db.tournamentTeamDao().insertCrossRef(
+                            TournamentTeamCrossRef(
+                                tournamentId = tId,
+                                teamId = tmId,
+                                feePaid = true
+                            )
+                        )
+                    }
+                }
+            }
+
             true
+
         } catch (e: Exception) {
             e.printStackTrace()
             false

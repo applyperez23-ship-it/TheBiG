@@ -4,35 +4,56 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Modern Minimalist Trophy - Left Half (Gold / Amber) -->
+    <!-- Golden Trophy Cup Body -->
     <path
         android:fillColor="#FBBF24"
-        android:pathData="M52,28 L36,28 C34,28 32,30 32,32 L32,46 C32,56 40,64 50,65.8 L50,72 L42,72 C40,72 38,74 38,76 L38,80 L52,80 Z" />
-    
-    <!-- Left Trophy Handle -->
+        android:pathData="M34,30 L74,30 C74,52 68,62 54,66 C40,62 34,52 34,30 Z" />
+
+    <!-- Trophy Rim -->
     <path
         android:fillColor="#F59E0B"
-        android:pathData="M32,34 L26,34 C23,34 21,36 21,39 L21,45 C21,50 25,54 30,54 L32,54 L32,48 L30,48 C28,48 26,46 26,44 L26,40 C26,39 27,38 28,38 L32,38 Z" />
+        android:pathData="M32,27 L76,27 C77,27 78,28 78,29 L78,32 C78,33 77,34 76,34 L32,34 C31,34 30,33 30,32 L30,29 C30,28 31,27 32,27 Z" />
 
-    <!-- Modern Minimalist Trophy - Right Half (Emerald Accent) -->
+    <!-- Left Handle -->
     <path
-        android:fillColor="#10B981"
-        android:pathData="M56,28 L72,28 C74,28 76,30 76,32 L76,46 C76,56 68,64 58,65.8 L58,72 L66,72 C68,72 70,74 70,76 L70,80 L56,80 Z" />
-
-    <!-- Right Trophy Handle -->
-    <path
-        android:fillColor="#059669"
-        android:pathData="M76,34 L82,34 C85,34 87,36 87,39 L87,45 C87,50 83,54 78,54 L76,54 L76,48 L78,48 C80,48 82,46 82,44 L82,40 C82,39 81,38 80,38 L76,38 Z" />
-
-    <!-- Sharp Diagonal Cutting Line Divider -->
-    <path
-        android:strokeColor="#090D16"
-        android:strokeWidth="3.5"
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="4"
         android:strokeLineCap="round"
-        android:pathData="M24,84 L84,24" />
+        android:pathData="M34,34 C20,34 20,48 34,52" />
 
-    <!-- Center Trophy Star Accent -->
+    <!-- Right Handle -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,42 L55.5,45.5 L59,46 L56.5,48.5 L57,52 L54,50.2 L51,52 L51.5,48.5 L49,46 L52.5,45.5 Z" />
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M74,34 C88,34 88,48 74,52" />
+
+    <!-- Trophy Stem -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M50,66 L58,66 L58,74 L50,74 Z" />
+
+    <!-- Pedestal Tier 1 -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M42,74 L66,74 C67,74 68,75 68,76 L68,78 C68,79 67,80 66,80 L42,80 C41,80 40,79 40,78 L40,76 C40,75 41,74 42,74 Z" />
+
+    <!-- Pedestal Tier 2 -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M36,78 L72,78 C73,78 74,79 74,80 L74,84 C74,85 73,86 72,86 L36,86 C35,86 34,85 34,84 L34,80 C34,79 35,78 36,78 Z" />
+
+    <!-- Diagonal Cutting Line 1 (Dark Navy #0F172A) -->
+    <path
+        android:strokeColor="#0F172A"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M26,62 L82,28" />
+
+    <!-- Diagonal Cutting Line 2 (Dark Navy #0F172A) -->
+    <path
+        android:strokeColor="#0F172A"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M32,70 L88,36" />
 </vector>

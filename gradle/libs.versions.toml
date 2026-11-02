@@ -35,6 +35,8 @@ camerax-core = { group = "androidx.camera", name = "camera-core", version.ref = 
 camerax-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
 camerax-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 camerax-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
+lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", version = "6.6.2" }
+
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

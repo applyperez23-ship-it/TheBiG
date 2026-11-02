@@ -534,6 +534,7 @@ private fun StandingsTabContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -602,17 +603,11 @@ private fun StandingsTabContent(
             }
         }
 
-        // Bracket view if tournament has knockout stages
-        if (tournament.tournamentType == TournamentModes.CUP || tournament.tournamentType == TournamentModes.GROUPS_CUP) {
-            BracketDiagramView(matches = matches, teams = enrolledTeams, onMatchClick = onMatchClick)
-            Spacer(modifier = Modifier.height(4.dp))
-        }
-
         if (standings.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .padding(32.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -623,7 +618,7 @@ private fun StandingsTabContent(
                 )
             }
         } else {
-            // Perfectly aligned Standings Table Header: PJ, PG, PE, PP, GF, GC, DG, PTS
+            // Standings Table Header: PJ, PG, PE, PP, GF, GC, DG, PTS
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -658,11 +653,11 @@ private fun StandingsTabContent(
                 }
             }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+            Column(
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                items(standings, key = { it.team.id }) { s ->
+                standings.forEach { s ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
@@ -702,6 +697,13 @@ private fun StandingsTabContent(
                 }
             }
         }
+
+        // Continuous Downward Flow into Knockout Tree
+        com.example.ui.components.VerticalKnockoutTreeFlow(
+            matches = matches,
+            teams = enrolledTeams,
+            onMatchClick = onMatchClick
+        )
     }
 }
 

@@ -79,7 +79,8 @@ class TeamViewModel(private val repository: TheBiGRepository) : ViewModel() {
         dorsal: Int,
         isGoalkeeper: Boolean,
         feePaid: Boolean = false,
-        isCaptain: Boolean = false
+        isCaptain: Boolean = false,
+        photoUri: String? = null
     ): Result<Long> {
         val currentPlayers = repository.getPlayersForTeamOnce(teamId)
         if (currentPlayers.size >= 22) {
@@ -92,7 +93,8 @@ class TeamViewModel(private val repository: TheBiGRepository) : ViewModel() {
             dorsal = dorsal,
             isGoalkeeper = isGoalkeeper,
             feePaid = feePaid,
-            isCaptain = isCaptain
+            isCaptain = isCaptain,
+            photoUri = photoUri
         )
         val id = repository.savePlayer(player)
         return Result.success(id)

@@ -26,6 +26,7 @@ data class Player(
     val isCaptain: Boolean = false,
     val isGoalkeeper: Boolean = false,
     val feePaid: Boolean = false,
+    val photoUri: String? = null,
     val matchesPlayed: Int = 0,
     val matchesAsGoalkeeper: Int = 0,
     val goalsConcededAsGk: Int = 0,
@@ -33,3 +34,4 @@ data class Player(
 ) {
     val number: Int get() = dorsal
 }
+

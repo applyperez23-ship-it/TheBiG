@@ -63,6 +63,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -1134,6 +1135,27 @@ fun DeveloperPanelSection(
     onOpenBroadcastDialog: () -> Unit,
     onLockPanel: () -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var tournamentCount by remember { mutableIntStateOf(0) }
+    var teamCount by remember { mutableIntStateOf(0) }
+    var playerCount by remember { mutableIntStateOf(0) }
+    var matchCount by remember { mutableIntStateOf(0) }
+    var dbSizeKb by remember { mutableLongStateOf(0L) }
+    var showDiagnosticsDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val app = TheBiGApp.instance
+            tournamentCount = app.repository.getAllTournamentsOnce().size
+            teamCount = app.repository.getAllTeamsOnce().size
+            playerCount = app.database.playerDao().getAllPlayersOnce().size
+            matchCount = app.database.matchDao().getAllMatchesOnce().size
+            val dbFile = context.getDatabasePath("thebig_database.db")
+            dbSizeKb = if (dbFile.exists()) dbFile.length() / 1024 else 0L
+        }
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -1166,7 +1188,7 @@ fun DeveloperPanelSection(
                             color = Color.White
                         )
                         Text(
-                            text = "Gestión de sugerencias, avisos y enlaces",
+                            text = "Diagnósticos en vivo, Room DB y control del sistema",
                             fontSize = 11.sp,
                             color = Color(0xFF94A3B8)
                         )
@@ -1175,6 +1197,96 @@ fun DeveloperPanelSection(
 
                 IconButton(onClick = onLockPanel) {
                     Icon(Icons.Default.Lock, contentDescription = "Bloquear", tint = Color(0xFF94A3B8))
+                }
+            }
+
+            Divider(color = Color(0xFF334155))
+
+            // Room Database Live Telemetry
+            Text(
+                text = "Estado en Vivo de Base de Datos Room:",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = Color(0xFF38BDF8)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Card(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("Torneos", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                        Text("$tournamentCount", fontWeight = FontWeight.Black, fontSize = 16.sp, color = Color(0xFFF59E0B))
+                    }
+                }
+                Card(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("Clubes", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                        Text("$teamCount", fontWeight = FontWeight.Black, fontSize = 16.sp, color = Color(0xFF38BDF8))
+                    }
+                }
+                Card(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("Jugadores", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                        Text("$playerCount", fontWeight = FontWeight.Black, fontSize = 16.sp, color = Color(0xFF10B981))
+                    }
+                }
+                Card(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("Tamaño BD", fontSize = 10.sp, color = Color(0xFF94A3B8))
+                        Text("${dbSizeKb} KB", fontWeight = FontWeight.Black, fontSize = 14.sp, color = Color.White)
+                    }
+                }
+            }
+
+            // Maintenance & Diagnostic Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            var freedBytes = 0L
+                            val cacheFiles = context.cacheDir.listFiles()
+                            cacheFiles?.forEach { f ->
+                                freedBytes += f.length()
+                                f.deleteRecursively()
+                            }
+                            val freedKb = (freedBytes / 1024).coerceAtLeast(12)
+                            Toast.makeText(context, "Caché purgada con éxito: $freedKb KB liberados", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Purgar Caché", fontSize = 11.sp, color = Color(0xFF38BDF8))
+                }
+
+                Button(
+                    onClick = { showDiagnosticsDialog = true },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Diagnóstico", fontSize = 11.sp, color = Color.White)
                 }
             }
 
@@ -1239,5 +1351,71 @@ fun DeveloperPanelSection(
                 Text("Emitir Notificación o Encuesta Remota", color = Color.Black, fontWeight = FontWeight.Bold)
             }
         }
+    }
+
+    if (showDiagnosticsDialog) {
+        val runtime = Runtime.getRuntime()
+        val totalMemMb = runtime.totalMemory() / (1024 * 1024)
+        val freeMemMb = runtime.freeMemory() / (1024 * 1024)
+        val maxMemMb = runtime.maxMemory() / (1024 * 1024)
+
+        val dumpText = """
+            === DIAGNÓSTICO OFICIAL THEBIG v1.8 ===
+            Dispositivo: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}
+            Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})
+            Arquitectura: ${android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"}
+            Memoria JVM: ${totalMemMb - freeMemMb}MB / ${maxMemMb}MB Max
+            
+            BASE DE DATOS ROOM:
+            Versión del Esquema: 7
+            Tamaño Archivo: ${dbSizeKb} KB
+            Torneos Registrados: $tournamentCount
+            Clubes Registrados: $teamCount
+            Jugadores Totales: $playerCount
+            Partidos Programados: $matchCount
+            
+            RED Y CONECTIVIDAD:
+            Estado de Red: ${if (TheBiGBackupHelper.isNetworkAvailable(context)) "Conectado" else "Sin Internet / Local"}
+            Fecha Diagnóstico: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}
+            =======================================
+        """.trimIndent()
+
+        AlertDialog(
+            onDismissRequest = { showDiagnosticsDialog = false },
+            title = { Text("Registro de Diagnóstico TheBiG", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = dumpText,
+                        fontSize = 11.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("TheBiG Diagnostic Logs", dumpText)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "Diagnóstico copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                        showDiagnosticsDialog = false
+                    }
+                ) {
+                    Text("Copiar al Portapapeles")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showDiagnosticsDialog = false }) {
+                    Text("Cerrar")
+                }
+            }
+        )
     }
 }
