@@ -29,7 +29,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Match::class,
         MatchEvent::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class TheBiGDatabase : RoomDatabase() {
@@ -52,6 +52,13 @@ abstract class TheBiGDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE tournaments ADD COLUMN whatsappGroupUrl TEXT DEFAULT NULL")
+                database.execSQL("ALTER TABLE tournaments ADD COLUMN isHomeAwayEnabled INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getDatabase(context: Context): TheBiGDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -59,7 +66,7 @@ abstract class TheBiGDatabase : RoomDatabase() {
                     TheBiGDatabase::class.java,
                     "thebig_football.db"
                 )
-                    .addMigrations(MIGRATION_6_7)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

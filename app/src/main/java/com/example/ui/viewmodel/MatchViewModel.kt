@@ -103,6 +103,14 @@ class MatchViewModel(private val repository: TheBiGRepository) : ViewModel() {
         context.startService(intent)
     }
 
+    fun addStoppageTime(context: Context, secondsToAdd: Int) {
+        val intent = Intent(context, MatchTimerService::class.java).apply {
+            action = MatchTimerService.ACTION_ADD_TIME
+            putExtra(MatchTimerService.EXTRA_SECONDS_TO_ADD, secondsToAdd)
+        }
+        context.startService(intent)
+    }
+
     fun finishMatch(context: Context, matchId: Long, elapsedSeconds: Int) {
         viewModelScope.launch {
             val m = repository.getMatchOnce(matchId) ?: return@launch

@@ -108,6 +108,13 @@ class MatchTimerService : Service() {
                 )
                 startTimer()
             }
+            ACTION_ADD_TIME -> {
+                val secondsToAdd = intent.getIntExtra(EXTRA_SECONDS_TO_ADD, 60)
+                val current = _timerState.value
+                val updatedElapsed = (current.elapsedSeconds + secondsToAdd).coerceAtLeast(0)
+                _timerState.value = current.copy(elapsedSeconds = updatedElapsed)
+                notificationManager.notify(NOTIFICATION_ID, buildNotification(_timerState.value))
+            }
             ACTION_STOP -> {
                 stopTimer()
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -205,6 +212,7 @@ class MatchTimerService : Service() {
         const val ACTION_PAUSE = "com.example.service.ACTION_PAUSE"
         const val ACTION_RESUME = "com.example.service.ACTION_RESUME"
         const val ACTION_START_SECOND_HALF = "com.example.service.ACTION_START_SECOND_HALF"
+        const val ACTION_ADD_TIME = "com.example.service.ACTION_ADD_TIME"
         const val ACTION_STOP = "com.example.service.ACTION_STOP"
 
         const val EXTRA_MATCH_ID = "extra_match_id"
@@ -213,6 +221,7 @@ class MatchTimerService : Service() {
         const val EXTRA_DURATION = "extra_duration"
         const val EXTRA_ELAPSED = "extra_elapsed"
         const val EXTRA_PERIOD = "extra_period"
+        const val EXTRA_SECONDS_TO_ADD = "extra_seconds_to_add"
 
         private val _timerState = MutableStateFlow(LiveTimerState())
         val timerState: StateFlow<LiveTimerState> = _timerState.asStateFlow()

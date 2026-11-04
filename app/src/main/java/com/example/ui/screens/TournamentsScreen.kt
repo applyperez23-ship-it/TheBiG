@@ -185,7 +185,7 @@ fun TournamentsScreen(
                         viewModel.enrollTeam(id, tId, feePaid = false)
                     }
                     // Generate schedule using exact mathematical TournamentScheduler
-                    if (selectedTeamIds.size >= 2) {
+                    if (selectedTeamIds.size >= 3) {
                         val enrolled = allTeams.filter { selectedTeamIds.contains(it.id) }
                         val generatedMatches = com.example.domain.rules.TournamentScheduler.generateSchedule(
                             tournamentId = id,

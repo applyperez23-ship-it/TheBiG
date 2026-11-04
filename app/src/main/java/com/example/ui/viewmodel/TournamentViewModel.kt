@@ -60,7 +60,9 @@ class TournamentViewModel(private val repository: TheBiGRepository) : ViewModel(
         yellowCardFine: Double = 5.0,
         redCardFine: Double = 10.0,
         minMatchesGk: Int = 2,
-        financialModel: String = "BY_TEAM"
+        financialModel: String = "BY_TEAM",
+        whatsappGroupUrl: String? = null,
+        isHomeAwayEnabled: Boolean = false
     ): Long {
         val t = Tournament(
             name = name.trim(),
@@ -85,7 +87,9 @@ class TournamentViewModel(private val repository: TheBiGRepository) : ViewModel(
             yellowCardFine = yellowCardFine,
             redCardFine = redCardFine,
             minMatchesForBestGk = minMatchesGk,
-            financialModel = financialModel
+            financialModel = financialModel,
+            whatsappGroupUrl = whatsappGroupUrl,
+            isHomeAwayEnabled = isHomeAwayEnabled
         )
         return repository.saveTournament(t)
     }

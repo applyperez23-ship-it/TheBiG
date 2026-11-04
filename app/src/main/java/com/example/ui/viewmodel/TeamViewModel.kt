@@ -86,6 +86,9 @@ class TeamViewModel(private val repository: TheBiGRepository) : ViewModel() {
         if (currentPlayers.size >= 22) {
             return Result.failure(Exception("El equipo ya alcanzó el límite reglamentario de 22 jugadores"))
         }
+        if (currentPlayers.any { it.name.equals(name.trim(), ignoreCase = true) }) {
+            return Result.failure(Exception("Ya existe un jugador registrado con este nombre en la plantilla"))
+        }
 
         val player = Player(
             teamId = teamId,

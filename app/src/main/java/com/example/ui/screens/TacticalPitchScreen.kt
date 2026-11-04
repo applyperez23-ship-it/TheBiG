@@ -483,6 +483,7 @@ fun TacticalPitchScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
                                     maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     modifier = Modifier
                                         .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
                                         .padding(horizontal = 4.dp, vertical = 1.dp)

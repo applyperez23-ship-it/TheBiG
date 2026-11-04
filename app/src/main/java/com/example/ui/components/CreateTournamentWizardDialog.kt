@@ -341,31 +341,42 @@ fun CreateTournamentWizardDialog(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Clubes Participantes (${selectedTeamIds.size} seleccionados):",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
-                                    )
-
-                                    if (availableTeams.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Text(
-                                            text = if (selectedTeamIds.size == availableTeams.size) "Deseleccionar" else "Todos",
-                                            color = MaterialTheme.colorScheme.primary,
+                                            text = "Clubes Participantes (${selectedTeamIds.size} seleccionados):",
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            modifier = Modifier.clickable {
-                                                if (selectedTeamIds.size == availableTeams.size) {
-                                                    selectedTeamIds.clear()
-                                                } else {
-                                                    selectedTeamIds.clear()
-                                                    selectedTeamIds.addAll(availableTeams.map { it.id })
+                                            fontSize = 13.sp
+                                        )
+
+                                        if (availableTeams.isNotEmpty()) {
+                                            Text(
+                                                text = if (selectedTeamIds.size == availableTeams.size) "Deseleccionar" else "Todos",
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                modifier = Modifier.clickable {
+                                                    if (selectedTeamIds.size == availableTeams.size) {
+                                                        selectedTeamIds.clear()
+                                                    } else {
+                                                        selectedTeamIds.clear()
+                                                        selectedTeamIds.addAll(availableTeams.map { it.id })
+                                                    }
                                                 }
-                                            }
+                                            )
+                                        }
+                                    }
+
+                                    if (selectedTeamIds.size < 3) {
+                                        Text(
+                                            text = "⚠️ Se requieren al menos 3 equipos registrados para iniciar el torneo.",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.error
                                         )
                                     }
                                 }
@@ -669,7 +680,7 @@ fun CreateTournamentWizardDialog(
                     if (step < 4) {
                         Button(
                             onClick = { step++ },
-                            enabled = if (step == 1) name.isNotBlank() else if (step == 2) selectedTeamIds.size >= 2 else true,
+                            enabled = if (step == 1) name.isNotBlank() else if (step == 2) selectedTeamIds.size >= 3 else true,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("wizard_tournament_next_button"),
@@ -699,7 +710,7 @@ fun CreateTournamentWizardDialog(
                                     financialModel
                                 )
                             },
-                            enabled = name.isNotBlank() && selectedTeamIds.size >= 2,
+                            enabled = name.isNotBlank() && selectedTeamIds.size >= 3,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("wizard_tournament_finish_button"),

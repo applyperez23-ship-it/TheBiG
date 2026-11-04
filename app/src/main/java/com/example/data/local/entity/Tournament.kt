@@ -47,8 +47,9 @@ data class Tournament(
     val redCardFine: Double = 10.0,
     val minMatchesForBestGk: Int = 2,
     val financialModel: String = "BY_TEAM", // BY_TEAM or BY_PLAYER
+    val whatsappGroupUrl: String? = null,
+    val isHomeAwayEnabled: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
-
 ) {
     val feePerPlayer: Double
         get() = if (financialModel == "BY_PLAYER") entryFee else (if (playersPerTeam > 0) entryFee / playersPerTeam else 0.0)
