@@ -159,7 +159,7 @@ fun TournamentsScreen(
         com.example.ui.components.CreateTournamentWizardDialog(
             availableTeams = allTeams,
             onDismiss = { showCreateDialog = false },
-            onConfirm = { name, edition, type, durationMin, fee, playersCount, selectedTeamIds, ch, ru, sc, gk, homeAndAway, financialModel ->
+            onConfirm = { name, edition, type, durationMin, fee, playersCount, selectedTeamIds, ch, ru, sc, gk, homeAndAway, financialModel, awardTiming, assisterPrize, mvpPrize ->
                 scope.launch {
                     val id = viewModel.createTournament(
                         name = name,
@@ -168,17 +168,18 @@ fun TournamentsScreen(
                         playersPerTeam = playersCount,
                         matchDurationMinutes = durationMin,
                         tournamentType = type,
-                        awardTiming = AwardTimingModes.END_OF_LEAGUE,
+                        awardTiming = awardTiming,
                         prizeChampion = ch,
                         prizeRunnerUp = ru,
                         prizeScorer = sc,
-                        prizeAssister = 0.0,
+                        prizeAssister = assisterPrize,
                         prizeBestGk = gk,
-                        prizeMvp = 0.0,
+                        prizeMvp = mvpPrize,
                         yellowCardFine = 5.0,
                         redCardFine = 10.0,
                         minMatchesGk = 2,
-                        financialModel = financialModel
+                        financialModel = financialModel,
+                        isHomeAwayEnabled = homeAndAway
                     )
                     // Enroll all selected teams
                     for (tId in selectedTeamIds) {

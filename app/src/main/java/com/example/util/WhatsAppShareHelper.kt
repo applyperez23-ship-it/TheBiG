@@ -24,4 +24,21 @@ object WhatsAppShareHelper {
             context.startActivity(genericIntent)
         }
     }
+
+    fun openWhatsAppUrl(context: Context, url: String) {
+        try {
+            val targetUri = if (url.startsWith("http://") || url.startsWith("https://")) {
+                Uri.parse(url)
+            } else {
+                Uri.parse("https://$url")
+            }
+            val intent = Intent(Intent.ACTION_VIEW, targetUri).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            openSupportWhatsApp(context, "Hola Daniel, intento acceder al enlace de WhatsApp: $url")
+        }
+    }
 }
+

@@ -36,4 +36,7 @@ interface MatchEventDao {
 
     @Query("SELECT * FROM match_events")
     suspend fun getAllEventsOnce(): List<MatchEvent>
+
+    @Query("DELETE FROM match_events WHERE eventType IN ('YELLOW_CARD', 'RED_CARD')")
+    suspend fun deleteAllCardEvents()
 }

@@ -328,12 +328,16 @@ fun TournamentDetailScreen(
                         enrolledTeams = enrolledTeams,
                         players = players,
                         onGenerate = {
+                            if (enrolledTeams.size < 3) {
+                                android.widget.Toast.makeText(context, "Se requieren al menos 3 equipos inscritos para generar partidos", android.widget.Toast.LENGTH_LONG).show()
+                                return@FixtureTabContent
+                            }
                             scope.launch {
                                 val newMatches = TournamentScheduler.generateSchedule(
                                     tournamentId = tournamentId,
                                     tournamentType = tournament.tournamentType,
                                     teams = enrolledTeams,
-                                    homeAndAway = false
+                                    homeAndAway = tournament.isHomeAwayEnabled
                                 )
                                 for (m in newMatches) {
                                     app.repository.saveMatch(m)

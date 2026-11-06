@@ -56,6 +56,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -1287,6 +1288,261 @@ fun DeveloperPanelSection(
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Diagnóstico", fontSize = 11.sp, color = Color.White)
+                }
+            }
+
+            Divider(color = Color(0xFF334155))
+
+            // Modo Cheats & Herramientas Especiales para Organizador
+            Text(
+                text = "Herramientas Especiales y Modo Cheats:",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = Color(0xFFF59E0B)
+            )
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val sharedPrefs = remember { context.getSharedPreferences("thebig_prefs", Context.MODE_PRIVATE) }
+                    var whatsappUrl by remember {
+                        mutableStateOf(sharedPrefs.getString("whatsapp_group_url", "https://chat.whatsapp.com/TheBiGOficial") ?: "https://chat.whatsapp.com/TheBiGOficial")
+                    }
+                    var isEditingWhatsApp by remember { mutableStateOf(false) }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Enlace a Grupo de WhatsApp:", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = whatsappUrl,
+                                fontSize = 10.sp,
+                                color = Color(0xFF38BDF8),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            OutlinedButton(
+                                onClick = { isEditingWhatsApp = !isEditingWhatsApp },
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(30.dp)
+                            ) {
+                                Text(if (isEditingWhatsApp) "Cerrar" else "Editar", fontSize = 10.sp, color = Color.White)
+                            }
+                            Button(
+                                onClick = {
+                                    WhatsAppShareHelper.openWhatsAppUrl(context, whatsappUrl)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(30.dp)
+                            ) {
+                                Text("Abrir", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    if (isEditingWhatsApp) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = whatsappUrl,
+                                onValueChange = { whatsappUrl = it },
+                                label = { Text("URL Grupo WhatsApp", fontSize = 10.sp) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    sharedPrefs.edit().putString("whatsapp_group_url", whatsappUrl).apply()
+                                    isEditingWhatsApp = false
+                                    Toast.makeText(context, "Enlace de WhatsApp actualizado", Toast.LENGTH_SHORT).show()
+                                },
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(36.dp)
+                            ) {
+                                Text("Guardar", fontSize = 10.sp)
+                            }
+                        }
+                    }
+
+                    var showSorteoDialog by remember { mutableStateOf(false) }
+                    var allTournamentsList by remember { mutableStateOf<List<com.example.data.local.entity.Tournament>>(emptyList()) }
+                    var allTeamsList by remember { mutableStateOf<List<com.example.data.local.entity.Team>>(emptyList()) }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // Action 1: Inmunidad / Limpiar Tarjetas
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        TheBiGApp.instance.database.matchEventDao().deleteAllCardEvents()
+                                    }
+                                    Toast.makeText(context, "Inmunidad activada: amonestaciones y expulsiones limpiadas", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text("Inmunidad Tarjetas", fontSize = 10.sp, color = Color(0xFFF59E0B))
+                        }
+
+                        // Action 2: Sorteo a Medida (Forzar Cruce Directo)
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    val (tourneys, teams) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        Pair(
+                                            TheBiGApp.instance.repository.getAllTournamentsOnce(),
+                                            TheBiGApp.instance.repository.getAllTeamsOnce()
+                                        )
+                                    }
+                                    allTournamentsList = tourneys
+                                    allTeamsList = teams
+                                    if (tourneys.isEmpty() || teams.size < 2) {
+                                        Toast.makeText(context, "Se requiere al menos 1 torneo y 2 clubes para sortear cruces", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        showSorteoDialog = true
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text("Sorteo a Medida", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    if (showSorteoDialog && allTournamentsList.isNotEmpty() && allTeamsList.size >= 2) {
+                        var selectedTourneyId by remember { mutableStateOf(allTournamentsList.first().id) }
+                        var homeTeamId by remember { mutableStateOf(allTeamsList.first().id) }
+                        var awayTeamId by remember { mutableStateOf(allTeamsList.getOrNull(1)?.id ?: allTeamsList.first().id) }
+                        var roundLabel by remember { mutableStateOf("Cruce Especial Directo") }
+
+                        AlertDialog(
+                            onDismissRequest = { showSorteoDialog = false },
+                            title = { Text("Sorteo a Medida (Forzar Cruce)", fontWeight = FontWeight.Bold) },
+                            text = {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .verticalScroll(rememberScrollState()),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text("Selecciona el torneo y los dos clubes a enfrentar:", fontSize = 12.sp)
+
+                                    // Pick Tournament
+                                    Text("Torneo de destino:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    allTournamentsList.forEach { tourney ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { selectedTourneyId = tourney.id },
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            RadioButton(
+                                                selected = selectedTourneyId == tourney.id,
+                                                onClick = { selectedTourneyId = tourney.id }
+                                            )
+                                            Text(tourney.name, fontSize = 12.sp)
+                                        }
+                                    }
+
+                                    Divider()
+
+                                    // Pick Home Team
+                                    Text("Equipo Local:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    allTeamsList.forEach { team ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { homeTeamId = team.id },
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            RadioButton(
+                                                selected = homeTeamId == team.id,
+                                                onClick = { homeTeamId = team.id }
+                                            )
+                                            Text(team.name, fontSize = 12.sp)
+                                        }
+                                    }
+
+                                    Divider()
+
+                                    // Pick Away Team
+                                    Text("Equipo Visitante:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    allTeamsList.filter { it.id != homeTeamId }.forEach { team ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { awayTeamId = team.id },
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            RadioButton(
+                                                selected = awayTeamId == team.id,
+                                                onClick = { awayTeamId = team.id }
+                                            )
+                                            Text(team.name, fontSize = 12.sp)
+                                        }
+                                    }
+
+                                    OutlinedTextField(
+                                        value = roundLabel,
+                                        onValueChange = { roundLabel = it },
+                                        label = { Text("Etiqueta / Fase") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        scope.launch {
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                val newMatch = com.example.data.local.entity.Match(
+                                                    tournamentId = selectedTourneyId,
+                                                    homeTeamId = homeTeamId,
+                                                    awayTeamId = awayTeamId,
+                                                    roundName = roundLabel,
+                                                    status = "SCHEDULED",
+                                                    homeScore = 0,
+                                                    awayScore = 0
+                                                )
+                                                TheBiGApp.instance.database.matchDao().insertMatch(newMatch)
+                                            }
+                                            Toast.makeText(context, "Cruce forzado programado con éxito", Toast.LENGTH_SHORT).show()
+                                            showSorteoDialog = false
+                                        }
+                                    }
+                                ) {
+                                    Text("Programar Cruce")
+                                }
+                            },
+                            dismissButton = {
+                                OutlinedButton(onClick = { showSorteoDialog = false }) {
+                                    Text("Cancelar")
+                                }
+                            }
+                        )
+                    }
                 }
             }
 

@@ -371,13 +371,71 @@ object TournamentScheduler {
                     )
                 } else {
                     val semiMatches = allMatches.filter { it.roundName.startsWith("Semifinal") }
-                    val semiWinners = semiMatches.map { getMatchWinnerId(it) }
-                    if (semiWinners.size >= 2) {
-                        listOf(Match(tournamentId = tournamentId, homeTeamId = semiWinners[0], awayTeamId = semiWinners[1], roundName = "Gran Final", status = "SCHEDULED"))
+                    val finalists = mutableListOf<Long>()
+                    val semi1Matches = semiMatches.filter { it.roundName.contains("Semifinal 1") }
+                    val semi2Matches = semiMatches.filter { it.roundName.contains("Semifinal 2") }
+
+                    if (semi1Matches.isNotEmpty()) {
+                        val teamA = semi1Matches.first().homeTeamId
+                        val teamB = semi1Matches.first().awayTeamId
+                        finalists.add(calculateSeriesWinnerId(teamA, teamB, semi1Matches))
+                    }
+                    if (semi2Matches.isNotEmpty()) {
+                        val teamA = semi2Matches.first().homeTeamId
+                        val teamB = semi2Matches.first().awayTeamId
+                        finalists.add(calculateSeriesWinnerId(teamA, teamB, semi2Matches))
+                    }
+
+                    if (finalists.size >= 2) {
+                        listOf(Match(tournamentId = tournamentId, homeTeamId = finalists[0], awayTeamId = finalists[1], roundName = "Gran Final", status = "SCHEDULED"))
                     } else emptyList()
                 }
             }
             else -> emptyList()
+        }
+    }
+
+    /**
+     * Calculates the series winner for a pair of teams across two legs (ida y vuelta)
+     * using the global aggregate score (marcador global).
+     * If tied on aggregate, penalties in the second leg decide the winner.
+     */
+    fun calculateSeriesWinnerId(teamAId: Long, teamBId: Long, seriesMatches: List<Match>): Long {
+        val legs = seriesMatches.filter {
+            (it.homeTeamId == teamAId && it.awayTeamId == teamBId) ||
+            (it.homeTeamId == teamBId && it.awayTeamId == teamAId)
+        }
+        if (legs.isEmpty()) return teamAId
+        if (legs.size == 1) return getMatchWinnerId(legs[0])
+
+        var teamAScore = 0
+        var teamBScore = 0
+        for (m in legs) {
+            if (m.homeTeamId == teamAId) {
+                teamAScore += m.homeScore
+                teamBScore += m.awayScore
+            } else {
+                teamAScore += m.awayScore
+                teamBScore += m.homeScore
+            }
+        }
+
+        return when {
+            teamAScore > teamBScore -> teamAId
+            teamBScore > teamAScore -> teamBId
+            else -> {
+                // If tied on aggregate, check penalties in the return match (vuelta)
+                val secondLeg = legs.last()
+                if (secondLeg.homePenalties != null && secondLeg.awayPenalties != null) {
+                    if (secondLeg.homeTeamId == teamAId) {
+                        if (secondLeg.homePenalties > secondLeg.awayPenalties) teamAId else teamBId
+                    } else {
+                        if (secondLeg.awayPenalties > secondLeg.homePenalties) teamAId else teamBId
+                    }
+                } else {
+                    getMatchWinnerId(secondLeg)
+                }
+            }
         }
     }
 

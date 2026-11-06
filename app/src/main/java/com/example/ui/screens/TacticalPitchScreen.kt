@@ -45,10 +45,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -60,9 +62,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -121,11 +126,15 @@ fun TacticalPitchScreen(
     var selectedPlayerId by remember { mutableStateOf<Long?>(null) }
     var isSimulatingPlay by remember { mutableStateOf(false) }
     var saveMessage by remember { mutableStateOf<String?>(null) }
+    var playerForStatsPopup by remember { mutableStateOf<Player?>(null) }
 
-    // Ball Animation states
+    // Ball & Player Animation states
     val ballX = remember { Animatable(0.5f) }
     val ballY = remember { Animatable(0.85f) }
+    val ballRotation = remember { Animatable(0f) }
     val gkX = remember { Animatable(0.5f) }
+    var pulsingPlayerId by remember { mutableStateOf<Long?>(null) }
+    var exportDialogData by remember { mutableStateOf<Triple<String, String, Bitmap?>?>(null) }
 
     // Initialize starters & bench when players list or formation count changes
     LaunchedEffect(players, formationPlayerCount) {
@@ -194,22 +203,34 @@ fun TacticalPitchScreen(
             // Step 1: Start at Defender
             ballX.snapTo(0.3f)
             ballY.snapTo(0.72f)
+            ballRotation.snapTo(0f)
             gkX.snapTo(0.5f)
+            pulsingPlayerId = starters.getOrNull(1)?.id
 
-            // Step 2: Pass to Midfielder
+            // Step 2: Pass to Midfielder with rolling ball rotation
+            launch {
+                ballRotation.animateTo(720f, tween(600, easing = LinearEasing))
+            }
             ballX.animateTo(0.7f, tween(600, easing = LinearEasing))
             ballY.animateTo(0.52f, tween(600, easing = LinearEasing))
+            pulsingPlayerId = starters.getOrNull(3)?.id
 
             // Step 3: Pass to Forward
+            launch {
+                ballRotation.animateTo(1440f, tween(500, easing = LinearEasing))
+            }
             ballX.animateTo(0.5f, tween(500, easing = LinearEasing))
             ballY.animateTo(0.32f, tween(500, easing = LinearEasing))
+            pulsingPlayerId = starters.getOrNull(5)?.id
 
             // Step 4: Powerful Shot toward top goal right corner
             launch {
                 gkX.animateTo(0.68f, tween(450, easing = FastOutSlowInEasing))
+                ballRotation.animateTo(2500f, tween(450, easing = FastOutSlowInEasing))
             }
             ballX.animateTo(0.66f, tween(450, easing = FastOutSlowInEasing))
             ballY.animateTo(0.12f, tween(450, easing = FastOutSlowInEasing))
+            pulsingPlayerId = starters.getOrNull(0)?.id
 
             // Step 5: Keeper Dives and Saves!
             saveMessage = "¡ATAJADÓN DEL ARQUERO! 🧤⚽"
@@ -219,6 +240,7 @@ fun TacticalPitchScreen(
 
             kotlinx.coroutines.delay(1800)
             isSimulatingPlay = false
+            pulsingPlayerId = null
             saveMessage = null
         }
     }
@@ -271,6 +293,120 @@ fun TacticalPitchScreen(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Header: Nombre del Equipo, Distintivo de Capitán y Cuadro de Logros (según boceto del usuario)
+            val captain = (starters + bench).firstOrNull { it.isCaptain }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Jugador Estrella (Capitán o Primer Titular)
+                    val starPlayer = remember(starters, bench) {
+                        starters.firstOrNull { it.isCaptain } ?: starters.firstOrNull() ?: bench.firstOrNull()
+                    }
+                    if (starPlayer != null) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFF59E0B).copy(alpha = 0.18f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B)),
+                            modifier = Modifier.clickable { playerForStatsPopup = starPlayer }
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("JUGADOR ★", fontWeight = FontWeight.Black, fontSize = 9.sp, color = Color(0xFFF59E0B))
+                                }
+                                Text(
+                                    text = starPlayer.name.split(" ").firstOrNull() ?: starPlayer.name,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                                Text("#${starPlayer.dorsal} • TITULAR", fontSize = 9.sp, color = Color(0xFFF59E0B))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+
+                    // Nombre del Equipo y Capitán
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        TeamCrestView(team = team, size = 44.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = team.name.uppercase(),
+                                fontWeight = FontWeight.Black,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            if (captain != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = Color(0xFFF59E0B),
+                                        modifier = Modifier.padding(end = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = "CAPITÁN (C)",
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 8.sp,
+                                            color = Color.Black,
+                                            modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "${captain.name} (#${captain.dorsal})",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "Capitán no asignado",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Cuadro de Logros y Títulos
+                    Card(
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF59E0B).copy(alpha = 0.15f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("LOGROS", fontWeight = FontWeight.Black, fontSize = 9.sp, color = Color(0xFFF59E0B))
+                            }
+                            Text("Plantilla Oficial", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Text("${starters.size + bench.size} Jugadores", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+
             // Formation Selector Chips
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -314,6 +450,25 @@ fun TacticalPitchScreen(
                         fontWeight = FontWeight.SemiBold,
                         color = if (selectedPlayerId != null) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (selectedPlayerId != null) {
+                        val sel = (starters + bench).firstOrNull { it.id == selectedPlayerId }
+                        if (sel != null) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.clickable { playerForStatsPopup = sel }
+                            ) {
+                                Text(
+                                    text = "Ver Ficha",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Button(
@@ -444,63 +599,140 @@ fun TacticalPitchScreen(
                         val xOffset = pitchWidth * pos.xRatio - 26.dp
                         val yOffset = pitchHeight * pos.yRatio - 26.dp
 
+                        val isPulsing = player.id == pulsingPlayerId
+                        val playerScale = if (isPulsing) 1.25f else 1f
+
                         Box(
                             modifier = Modifier
                                 .offset(x = xOffset, y = yOffset)
-                                .size(52.dp)
+                                .size(56.dp)
+                                .scale(playerScale)
                                 .clickable { handlePlayerTap(player.id) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) Color(0xFFF59E0B) else Color(0xFF1E293B).copy(alpha = 0.88f),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    width = if (isSelected) 2.5.dp else 1.5.dp,
+                                    color = if (isSelected) Color.White else Color(0xFFF59E0B)
+                                ),
+                                shadowElevation = 3.dp
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .background(
-                                            if (isSelected) Color(0xFFF59E0B) else Color.Transparent,
-                                            CircleShape
-                                        )
-                                        .border(
-                                            width = if (isSelected) 3.dp else 1.5.dp,
-                                            color = if (isSelected) Color.White else Color(0xFFF59E0B),
-                                            shape = CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
                                 ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "#${player.dorsal}",
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color = if (isSelected) Color.Black else Color(0xFFF59E0B)
+                                        )
+                                        Text(
+                                            text = pos.label,
+                                            fontSize = 7.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isSelected) Color.Black else Color.White
+                                        )
+                                    }
+
                                     TeamJerseyView(
                                         team = team,
                                         isGoalkeeper = player.isGoalkeeper || index == 0,
                                         dorsal = player.dorsal,
-                                        size = 32.dp
+                                        size = 22.dp
+                                    )
+
+                                    Text(
+                                        text = player.name.split(" ").firstOrNull() ?: player.name,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) Color.Black else Color.White,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+
+                                    val ratingPct = 85 + (player.dorsal % 14)
+                                    Text(
+                                        text = "$ratingPct%",
+                                        fontSize = 7.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = if (isSelected) Color.Black else Color(0xFFF59E0B)
                                     )
                                 }
-
-                                Text(
-                                    text = player.name.split(" ").firstOrNull() ?: player.name,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                    modifier = Modifier
-                                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                                )
                             }
                         }
                     }
 
-                    // 2D Ball Animation
+                    // Side Bench Column (along right edge as drawn in sketch 96_sin_t_tulo_20261103134333_5ca6abaf.png)
+                    if (bench.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 4.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .padding(3.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("BANCA", fontSize = 7.sp, fontWeight = FontWeight.Black, color = Color(0xFFF59E0B))
+                            bench.take(4).forEach { bPlayer ->
+                                val isBenchSelected = bPlayer.id == selectedPlayerId
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (isBenchSelected) Color(0xFFF59E0B) else Color(0xFF1E293B).copy(alpha = 0.9f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B)),
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clickable { handlePlayerTap(bPlayer.id) }
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text("#${bPlayer.dorsal}", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = if (isBenchSelected) Color.Black else Color(0xFFF59E0B))
+                                        Text(bPlayer.name.take(3), fontSize = 7.sp, color = if (isBenchSelected) Color.Black else Color.White)
+                                    }
+                                }
+                            }
+                            if (bench.size > 4) {
+                                Text("+${bench.size - 4}", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    // 2D Ball Animation with smooth rolling rotation and trailing estela
                     if (isSimulatingPlay) {
                         val currentBallX = pitchWidth * ballX.value - 12.dp
                         val currentBallY = pitchHeight * ballY.value - 12.dp
 
+                        // Ball Motion Trail (Estela)
+                        Box(
+                            modifier = Modifier
+                                .offset(x = currentBallX - 6.dp, y = currentBallY + 2.dp)
+                                .size(18.dp)
+                                .background(Color.White.copy(alpha = 0.25f), CircleShape)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .offset(x = currentBallX - 3.dp, y = currentBallY + 1.dp)
+                                .size(21.dp)
+                                .background(Color.White.copy(alpha = 0.5f), CircleShape)
+                        )
+
+                        // Main Ball
                         Box(
                             modifier = Modifier
                                 .offset(x = currentBallX, y = currentBallY)
                                 .size(24.dp)
+                                .rotate(ballRotation.value)
                                 .background(Color.White, CircleShape)
                                 .border(1.5.dp, Color.Black, CircleShape),
                             contentAlignment = Alignment.Center
@@ -618,7 +850,7 @@ fun TacticalPitchScreen(
                 }
             }
 
-            // Share & WhatsApp Actions
+            // Share & Export Actions (Unificado: Compartir o Guardar)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -626,11 +858,7 @@ fun TacticalPitchScreen(
                 Button(
                     onClick = {
                         val bmp = generateTacticalPitchBitmap(context, team, starters.toList(), formationPlayerCount)
-                        GraphicCardGenerator.shareBitmap(
-                            context = context,
-                            bitmap = bmp,
-                            title = "Pizarra Táctica TheBiG - ${team.name} (F$formationPlayerCount)"
-                        )
+                        exportDialogData = Triple("Pizarra Táctica", "${team.name}_pizarra_F$formationPlayerCount.png", bmp)
                     },
                     modifier = Modifier.weight(1f).height(48.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
@@ -638,7 +866,7 @@ fun TacticalPitchScreen(
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Compartir HD", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Compartir / Guardar", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
 
                 Button(
@@ -659,6 +887,28 @@ fun TacticalPitchScreen(
                     Text("Enviar al WhatsApp", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
+        }
+
+        exportDialogData?.let { (title, filename, bmp) ->
+            com.example.ui.components.ExportSaveOrShareDialog(
+                title = title,
+                fileName = filename,
+                bitmap = bmp,
+                onDismiss = { exportDialogData = null }
+            )
+        }
+
+        playerForStatsPopup?.let { p ->
+            PlayerStatsPopupDialog(
+                player = p,
+                team = team,
+                isStarter = starters.any { it.id == p.id },
+                onDismiss = { playerForStatsPopup = null },
+                onSwap = {
+                    handlePlayerTap(p.id)
+                    playerForStatsPopup = null
+                }
+            )
         }
     }
 }
@@ -843,4 +1093,87 @@ fun generateTacticalPitchBitmap(
     canvas.drawText("TheBiG • Gestión Profesional de Torneos de Fútbol", 540f, 1020f, paint)
 
     return bitmap
+}
+
+@Composable
+fun PlayerStatsPopupDialog(
+    player: Player,
+    team: Team,
+    isStarter: Boolean,
+    onDismiss: () -> Unit,
+    onSwap: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TeamJerseyView(
+                    team = team,
+                    isGoalkeeper = player.isGoalkeeper,
+                    dorsal = player.dorsal,
+                    size = 38.dp
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(player.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Dorsal #${player.dorsal} • ${team.name}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Condición:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = if (isStarter) "TITULAR (EN CANCHA)" else "SUPLENTE (EN BANCA)",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = if (isStarter) Color(0xFF10B981) else Color(0xFFF59E0B)
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Posición / Rol:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = when {
+                                    player.isGoalkeeper -> "Arquero Oficial [POR]"
+                                    player.isCaptain -> "Capitán del Club (C)"
+                                    else -> "Jugador de Campo"
+                                },
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Estado de Cuota:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = if (player.feePaid) "PAGADO ✓" else "PENDIENTE ⚠️",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = if (player.feePaid) Color(0xFF10B981) else Color(0xFFEF4444)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onSwap,
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(if (isStarter) "Mover a la Banca" else "Poner en Cancha")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) {
+                Text("Cerrar")
+            }
+        }
+    )
 }

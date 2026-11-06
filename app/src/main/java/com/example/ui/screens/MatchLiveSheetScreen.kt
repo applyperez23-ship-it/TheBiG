@@ -246,6 +246,48 @@ fun MatchLiveSheetScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Tie in knockout match alert banner: suggests penalty shootout
+            val isKnockoutMatch = currentMatch.roundName.contains("Final", ignoreCase = true) ||
+                    currentMatch.roundName.contains("Semi", ignoreCase = true) ||
+                    currentMatch.roundName.contains("Cuartos", ignoreCase = true) ||
+                    currentMatch.roundName.contains("Octavos", ignoreCase = true) ||
+                    currentMatch.roundName.contains("Repechaje", ignoreCase = true)
+            val isTied = currentMatch.homeScore == currentMatch.awayScore
+            val isShootoutNeeded = isKnockoutMatch && isTied && currentMatch.homePenalties == null && (currentMatch.status == "FINISHED" || currentPeriod == "2do Tiempo" || currentPeriod == "Finalizado")
+
+            if (isShootoutNeeded) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF59E0B).copy(alpha = 0.2f)),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFF59E0B))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("¡Empate en Eliminatoria Directa!", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFF59E0B))
+                                Text("Se sugiere definir el pase o campeonato mediante tanda de penaltis.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Button(
+                            onClick = { showShootoutDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B)),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Tanda de Penaltis", fontWeight = FontWeight.Black, fontSize = 11.sp, color = Color(0xFF0F172A))
+                        }
+                    }
+                }
+            }
+
             // Live Referee Clock Card with Period Tag
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -374,6 +416,43 @@ fun MatchLiveSheetScreen(
                                 Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("Finalizar")
+                            }
+                        }
+
+                        // Quick added time / Stoppage controls row
+                        if (currentMatch.status == "LIVE" && currentPeriod != "Descanso") {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Añadir / Ajustar Descuento:",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                listOf(
+                                    Triple("+1'", 60, Color(0xFF10B981)),
+                                    Triple("+2'", 120, Color(0xFF10B981)),
+                                    Triple("+3'", 180, Color(0xFF10B981)),
+                                    Triple("+5'", 300, Color(0xFF10B981)),
+                                    Triple("-1'", -60, Color(0xFFEF4444))
+                                ).forEach { (label, seconds, color) ->
+                                    Button(
+                                        onClick = {
+                                            viewModel.addStoppageTime(context, seconds)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = color.copy(alpha = 0.85f)),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier.weight(1f).height(32.dp)
+                                    ) {
+                                        Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                                    }
+                                }
                             }
                         } else {
                             // Finished state
@@ -1831,44 +1910,227 @@ fun ShootoutScoreDialog(
     onDismiss: () -> Unit,
     onConfirm: (homePenalties: Int, awayPenalties: Int) -> Unit
 ) {
-    var homeStr by remember { mutableStateOf(initialHome.toString()) }
-    var awayStr by remember { mutableStateOf(initialAway.toString()) }
+    val homeShots = remember { androidx.compose.runtime.mutableStateListOf<Boolean>() }
+    val awayShots = remember { androidx.compose.runtime.mutableStateListOf<Boolean>() }
+    var currentTurnIsHome by remember { mutableStateOf(true) }
+    var maxShotsCount by remember { mutableIntStateOf(5) } // 3, 5, 7, 11 (Toda la Plantilla)
+
+    LaunchedEffect(Unit) {
+        if (initialHome > 0 || initialAway > 0) {
+            repeat(initialHome) { homeShots.add(true) }
+            repeat(initialAway) { awayShots.add(true) }
+        }
+    }
+
+    val homeScore = homeShots.count { it }
+    val awayScore = awayShots.count { it }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Tanda de Penaltis", fontWeight = FontWeight.Bold) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.SportsSoccer, contentDescription = null, tint = Color(0xFFF59E0B))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Tanda de Penaltis Oficial", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Registra la definición por penales:")
-                OutlinedTextField(
-                    value = homeStr,
-                    onValueChange = { homeStr = it },
-                    label = { Text("Penales ${homeTeam?.name ?: "Local"}") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Tanda length selector
+                Text("Configuración de Disparos por Equipo:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(3 to "3 Tiros", 5 to "5 Tiros", 7 to "7 Tiros", 11 to "Toda Plantilla").forEach { (num, lbl) ->
+                        FilterChip(
+                            selected = maxShotsCount == num,
+                            onClick = { maxShotsCount = num },
+                            label = { Text(lbl, fontSize = 10.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                // Scoreboard card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "MARCADOR PENALTIS",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(homeTeam?.name ?: "Local", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("$homeScore", fontSize = 28.sp, fontWeight = FontWeight.Black, color = Color(0xFF10B981))
+                            }
+                            Text("—", fontSize = 24.sp, fontWeight = FontWeight.Black)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(awayTeam?.name ?: "Visitante", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("$awayScore", fontSize = 28.sp, fontWeight = FontWeight.Black, color = Color(0xFF3B82F6))
+                            }
+                        }
+                    }
+                }
+
+                // Interactive Shot Dots Row for Home
+                Text("${homeTeam?.name ?: "Local"} (Disparos: ${homeShots.size}/$maxShotsCount)", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    for (i in 0 until maxShotsCount.coerceAtLeast(homeShots.size)) {
+                        val result = homeShots.getOrNull(i)
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .background(
+                                    when (result) {
+                                        true -> Color(0xFF10B981)
+                                        false -> Color(0xFFEF4444)
+                                        null -> Color.Gray.copy(alpha = 0.3f)
+                                    },
+                                    CircleShape
+                                )
+                                .border(1.dp, Color.White, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (result == true) Text("✓", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            else if (result == false) Text("✕", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                // Interactive Shot Dots Row for Away
+                Text("${awayTeam?.name ?: "Visitante"} (Disparos: ${awayShots.size}/$maxShotsCount)", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    for (i in 0 until maxShotsCount.coerceAtLeast(awayShots.size)) {
+                        val result = awayShots.getOrNull(i)
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .background(
+                                    when (result) {
+                                        true -> Color(0xFF10B981)
+                                        false -> Color(0xFFEF4444)
+                                        null -> Color.Gray.copy(alpha = 0.3f)
+                                    },
+                                    CircleShape
+                                )
+                                .border(1.dp, Color.White, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (result == true) Text("✓", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            else if (result == false) Text("✕", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                // Turn Selector
+                Text(
+                    text = "Turno de Disparo: ${if (currentTurnIsHome) homeTeam?.name ?: "Local" else awayTeam?.name ?: "Visitante"}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary
                 )
-                OutlinedTextField(
-                    value = awayStr,
-                    onValueChange = { awayStr = it },
-                    label = { Text("Penales ${awayTeam?.name ?: "Visitante"}") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+
+                // Action buttons: GOL and FALLO
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            if (currentTurnIsHome) {
+                                homeShots.add(true)
+                                currentTurnIsHome = false
+                            } else {
+                                awayShots.add(true)
+                                currentTurnIsHome = true
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("GOL ⚽", fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            if (currentTurnIsHome) {
+                                homeShots.add(false)
+                                currentTurnIsHome = false
+                            } else {
+                                awayShots.add(false)
+                                currentTurnIsHome = true
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("FALLÓ ❌", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Deshacer último disparo",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable {
+                            if (!currentTurnIsHome && homeShots.isNotEmpty()) {
+                                homeShots.removeAt(homeShots.size - 1)
+                                currentTurnIsHome = true
+                            } else if (currentTurnIsHome && awayShots.isNotEmpty()) {
+                                awayShots.removeAt(awayShots.size - 1)
+                                currentTurnIsHome = false
+                            }
+                        }
+                    )
+                    Text(
+                        text = "Reiniciar tanda",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable {
+                            homeShots.clear()
+                            awayShots.clear()
+                            currentTurnIsHome = true
+                        }
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    val h = homeStr.toIntOrNull() ?: 0
-                    val a = awayStr.toIntOrNull() ?: 0
-                    onConfirm(h, a)
-                }
+                onClick = { onConfirm(homeScore, awayScore) },
+                shape = RoundedCornerShape(10.dp)
             ) {
-                Text("Guardar Penales")
+                Text("Guardar Resultado ($homeScore - $awayScore)")
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
+            OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) { Text("Cancelar") }
         }
     )
 }

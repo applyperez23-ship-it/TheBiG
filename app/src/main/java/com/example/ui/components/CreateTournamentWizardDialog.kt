@@ -83,7 +83,10 @@ fun CreateTournamentWizardDialog(
         topScorerPrize: Double,
         bestGkPrize: Double,
         homeAndAway: Boolean,
-        financialModel: String
+        financialModel: String,
+        awardTiming: String,
+        assisterPrize: Double,
+        mvpPrize: Double
     ) -> Unit
 ) {
     var step by remember { mutableIntStateOf(1) } // 1: General, 2: Equipos, 3: Premios %, 4: Resumen
@@ -93,6 +96,7 @@ fun CreateTournamentWizardDialog(
     var edition by remember { mutableStateOf("1") }
     var tournamentType by remember { mutableStateOf(TournamentModes.LEAGUE) }
     var homeAndAway by remember { mutableStateOf(false) }
+    var regularRounds by remember { mutableIntStateOf(3) }
     var durationMinutesText by remember { mutableStateOf("20") }
     var playersPerTeamText by remember { mutableStateOf("7") }
 
@@ -100,6 +104,18 @@ fun CreateTournamentWizardDialog(
     var financialModel by remember { mutableStateOf("BY_TEAM") }
     var financesEnabled by remember { mutableStateOf(true) }
     var entryFeeText by remember { mutableStateOf("100") }
+
+    // Prize mode: "PERCENTAGE" or "INDEPENDENT_FIXED"
+    var prizeMode by remember { mutableStateOf("PERCENTAGE") } // PERCENTAGE vs INDEPENDENT_FIXED
+    var awardTiming by remember { mutableStateOf(com.example.data.local.entity.AwardTimingModes.END_OF_LEAGUE) }
+
+    // Independent fixed prize texts (direct text inputs)
+    var customChampionText by remember { mutableStateOf("") }
+    var customRunnerUpText by remember { mutableStateOf("") }
+    var customScorerText by remember { mutableStateOf("") }
+    var customBestGkText by remember { mutableStateOf("") }
+    var customAssisterText by remember { mutableStateOf("") }
+    var customMvpText by remember { mutableStateOf("") }
 
     // Step 2 states
     val selectedTeamIds = remember { mutableStateListOf<Long>() }
@@ -129,20 +145,47 @@ fun CreateTournamentWizardDialog(
     val totalPool = PrizeCalculator.roundToTen(rawTotalPool)
 
     val championPrize = if (financesEnabled) {
-        PrizeCalculator.roundToTen(totalPool * ((percentages[PrizeCategory.CHAMPION] ?: 50f).toDouble() / 100.0))
+        if (prizeMode == "INDEPENDENT_FIXED") {
+            customChampionText.toDoubleOrNull() ?: 0.0
+        } else {
+            PrizeCalculator.roundToTen(totalPool * ((percentages[PrizeCategory.CHAMPION] ?: 50f).toDouble() / 100.0))
+        }
     } else 0.0
 
     val runnerUpPrize = if (financesEnabled) {
-        PrizeCalculator.roundToTen(totalPool * ((percentages[PrizeCategory.RUNNER_UP] ?: 25f).toDouble() / 100.0))
+        if (prizeMode == "INDEPENDENT_FIXED") {
+            customRunnerUpText.toDoubleOrNull() ?: 0.0
+        } else {
+            PrizeCalculator.roundToTen(totalPool * ((percentages[PrizeCategory.RUNNER_UP] ?: 25f).toDouble() / 100.0))
+        }
     } else 0.0
 
     val topScorerPrize = if (financesEnabled) {
-        PrizeCalculator.roundToTen(totalPool * ((percentages[PrizeCategory.TOP_SCORER] ?: 15f).toDouble() / 100.0))
+        if (prizeMode == "INDEPENDENT_FIXED") {
+            customScorerText.toDoubleOrNull() ?: 0.0
+        } else {
+            PrizeCalculator.roundToTen(totalPool * ((percentages[PrizeCategory.TOP_SCORER] ?: 15f).toDouble() / 100.0))
+        }
     } else 0.0
 
     val bestGkPrize = if (financesEnabled) {
-        PrizeCalculator.roundToTen(totalPool * ((percentages[PrizeCategory.BEST_GK] ?: 10f).toDouble() / 100.0))
+        if (prizeMode == "INDEPENDENT_FIXED") {
+            customBestGkText.toDoubleOrNull() ?: 0.0
+        } else {
+            PrizeCalculator.roundToTen(totalPool * ((percentages[PrizeCategory.BEST_GK] ?: 10f).toDouble() / 100.0))
+        }
     } else 0.0
+
+    val assisterPrize = if (financesEnabled && prizeMode == "INDEPENDENT_FIXED") {
+        customAssisterText.toDoubleOrNull() ?: 0.0
+    } else 0.0
+
+    val mvpPrize = if (financesEnabled && prizeMode == "INDEPENDENT_FIXED") {
+        customMvpText.toDoubleOrNull() ?: 0.0
+    } else 0.0
+
+    val totalAllocatedPrizes = championPrize + runnerUpPrize + topScorerPrize + bestGkPrize + assisterPrize + mvpPrize
+    val isPrizeExceeded = prizeMode == "INDEPENDENT_FIXED" && totalAllocatedPrizes > totalPool && totalPool > 0
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -291,19 +334,57 @@ fun CreateTournamentWizardDialog(
                                     }
                                 }
 
-                                if (tournamentType == TournamentModes.LEAGUE) {
+                                // Selector de Partidos de Ida y Vuelta (Fase Regular, Repechajes o Semifinales)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Partidos de Ida y Vuelta", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text("Aplica doble partido alternando localía (Fase Regular, Repechajes y Semifinales)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Switch(checked = homeAndAway, onCheckedChange = { homeAndAway = it })
+                                }
+
+                                // Selector numérico de Jornadas de Fase Regular (por defecto mínimo 3)
+                                if (tournamentType != TournamentModes.CUP) {
                                     Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp),
+                                        modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text("Partidos de Ida y Vuelta", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                            Text("Genera doble enfrentamiento alternando localía", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Jornadas Fase Regular", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            Text("Duración de la fase previa (Mínimo 3 jornadas)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
-                                        Switch(checked = homeAndAway, onCheckedChange = { homeAndAway = it })
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = { if (regularRounds > 3) regularRounds-- },
+                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Text("-", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                            }
+                                            Text(
+                                                text = "$regularRounds",
+                                                fontWeight = FontWeight.Black,
+                                                fontSize = 15.sp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            OutlinedButton(
+                                                onClick = { regularRounds++ },
+                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Text("+", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                            }
+                                        }
                                     }
                                 }
 
@@ -522,70 +603,192 @@ fun CreateTournamentWizardDialog(
                                         }
                                     }
 
-                                    Text("Reparto Jerárquico (Campeón ≥ Subcampeón ≥ Resto):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-
-                                    // Champion %
-                                    val chPct = percentages[PrizeCategory.CHAMPION] ?: 50f
-                                    Column {
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text("Campeón: ${chPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                            Text("$${"%.0f".format(championPrize)}", color = Color(0xFF10B981), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        }
-                                        Slider(
-                                            value = chPct,
-                                            onValueChange = {
-                                                percentages = PrizeCalculator.rebalanceHierarchicalPercentages(PrizeCategory.CHAMPION, it, percentages)
-                                            },
-                                            valueRange = 0f..100f
+                                    // Mode of Prizes Selector
+                                    Text("Modo de Asignación de Premios:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        FilterChip(
+                                            selected = prizeMode == "PERCENTAGE",
+                                            onClick = { prizeMode = "PERCENTAGE" },
+                                            label = { Text("Porcentual Jerárquico (100%)", fontSize = 11.sp) }
+                                        )
+                                        FilterChip(
+                                            selected = prizeMode == "INDEPENDENT_FIXED",
+                                            onClick = { prizeMode = "INDEPENDENT_FIXED" },
+                                            label = { Text("Premios Fijos Independientes ($)", fontSize = 11.sp) }
                                         )
                                     }
 
-                                    // Runner Up %
-                                    val ruPct = percentages[PrizeCategory.RUNNER_UP] ?: 25f
-                                    Column {
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text("Subcampeón: ${ruPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                            Text("$${"%.0f".format(runnerUpPrize)}", color = Color(0xFF3B82F6), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    // Award Delivery Timing Selector
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                    ) {
+                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text("Momento de Entrega de Premios:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                FilterChip(
+                                                    selected = awardTiming == com.example.data.local.entity.AwardTimingModes.END_OF_LEAGUE,
+                                                    onClick = { awardTiming = com.example.data.local.entity.AwardTimingModes.END_OF_LEAGUE },
+                                                    label = { Text("Al finalizar liga regular", fontSize = 10.sp) },
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                FilterChip(
+                                                    selected = awardTiming == com.example.data.local.entity.AwardTimingModes.END_OF_CUP,
+                                                    onClick = { awardTiming = com.example.data.local.entity.AwardTimingModes.END_OF_CUP },
+                                                    label = { Text("Al concluir fase final", fontSize = 10.sp) },
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
                                         }
-                                        Slider(
-                                            value = ruPct,
-                                            onValueChange = {
-                                                percentages = PrizeCalculator.rebalanceHierarchicalPercentages(PrizeCategory.RUNNER_UP, it, percentages)
-                                            },
-                                            valueRange = 0f..100f
-                                        )
                                     }
 
-                                    // Top Scorer %
-                                    val scPct = percentages[PrizeCategory.TOP_SCORER] ?: 15f
-                                    Column {
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text("Máximo Goleador: ${scPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                            Text("$${"%.0f".format(topScorerPrize)}", color = Color(0xFFEC4899), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        }
-                                        Slider(
-                                            value = scPct,
-                                            onValueChange = {
-                                                percentages = PrizeCalculator.rebalanceHierarchicalPercentages(PrizeCategory.TOP_SCORER, it, percentages)
-                                            },
-                                            valueRange = 0f..100f
+                                    if (prizeMode == "INDEPENDENT_FIXED") {
+                                        // Independent Fixed Inputs (Campeón, Goleador, Asistidor, Portero, MVP)
+                                        Text(
+                                            text = "Asignación Fija por Texto (Suma: $${"%.0f".format(totalAllocatedPrizes)} / Pozo: $$totalPool):",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = if (isPrizeExceeded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                                         )
-                                    }
 
-                                    // Best GK %
-                                    val gkPct = percentages[PrizeCategory.BEST_GK] ?: 10f
-                                    Column {
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                            Text("Valla Menos Vencida: ${gkPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                            Text("$${"%.0f".format(bestGkPrize)}", color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        if (isPrizeExceeded) {
+                                            Text(
+                                                text = "⚠️ La suma total de premios ($${"%.0f".format(totalAllocatedPrizes)}) supera el pozo recaudado ($$totalPool).",
+                                                color = MaterialTheme.colorScheme.error,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
-                                        Slider(
-                                            value = gkPct,
-                                            onValueChange = {
-                                                percentages = PrizeCalculator.rebalanceHierarchicalPercentages(PrizeCategory.BEST_GK, it, percentages)
-                                            },
-                                            valueRange = 0f..100f
-                                        )
+
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedTextField(
+                                                value = customChampionText,
+                                                onValueChange = { customChampionText = it.filter { c -> c.isDigit() || c == '.' } },
+                                                label = { Text("Campeón ($)") },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                                singleLine = true,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            OutlinedTextField(
+                                                value = customRunnerUpText,
+                                                onValueChange = { customRunnerUpText = it.filter { c -> c.isDigit() || c == '.' } },
+                                                label = { Text("Subcampeón ($)") },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                                singleLine = true,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedTextField(
+                                                value = customScorerText,
+                                                onValueChange = { customScorerText = it.filter { c -> c.isDigit() || c == '.' } },
+                                                label = { Text("Goleador ($)") },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                                singleLine = true,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            OutlinedTextField(
+                                                value = customBestGkText,
+                                                onValueChange = { customBestGkText = it.filter { c -> c.isDigit() || c == '.' } },
+                                                label = { Text("Portero ($)") },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                                singleLine = true,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedTextField(
+                                                value = customAssisterText,
+                                                onValueChange = { customAssisterText = it.filter { c -> c.isDigit() || c == '.' } },
+                                                label = { Text("Asistidor ($)") },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                                singleLine = true,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            OutlinedTextField(
+                                                value = customMvpText,
+                                                onValueChange = { customMvpText = it.filter { c -> c.isDigit() || c == '.' } },
+                                                label = { Text("MVP ($)") },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                                singleLine = true,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    } else {
+                                        Text("Reparto Jerárquico (Campeón ≥ Subcampeón ≥ Resto):", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+
+                                        // Champion %
+                                        val chPct = percentages[PrizeCategory.CHAMPION] ?: 50f
+                                        Column {
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text("Campeón: ${chPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                Text("$${"%.0f".format(championPrize)}", color = Color(0xFF10B981), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            }
+                                            Slider(
+                                                value = chPct,
+                                                onValueChange = {
+                                                    percentages = PrizeCalculator.rebalanceHierarchicalPercentages(PrizeCategory.CHAMPION, it, percentages)
+                                                },
+                                                valueRange = 0f..100f
+                                            )
+                                        }
+
+                                        // Runner Up %
+                                        val ruPct = percentages[PrizeCategory.RUNNER_UP] ?: 25f
+                                        Column {
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text("Subcampeón: ${ruPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                Text("$${"%.0f".format(runnerUpPrize)}", color = Color(0xFF3B82F6), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            }
+                                            Slider(
+                                                value = ruPct,
+                                                onValueChange = {
+                                                    percentages = PrizeCalculator.rebalanceHierarchicalPercentages(PrizeCategory.RUNNER_UP, it, percentages)
+                                                },
+                                                valueRange = 0f..100f
+                                            )
+                                        }
+
+                                        // Top Scorer %
+                                        val scPct = percentages[PrizeCategory.TOP_SCORER] ?: 15f
+                                        Column {
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text("Máximo Goleador: ${scPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                Text("$${"%.0f".format(topScorerPrize)}", color = Color(0xFFEC4899), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            }
+                                            Slider(
+                                                value = scPct,
+                                                onValueChange = {
+                                                    percentages = PrizeCalculator.rebalanceHierarchicalPercentages(PrizeCategory.TOP_SCORER, it, percentages)
+                                                },
+                                                valueRange = 0f..100f
+                                            )
+                                        }
+
+                                        // Best GK %
+                                        val gkPct = percentages[PrizeCategory.BEST_GK] ?: 10f
+                                        Column {
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text("Valla Menos Vencida: ${gkPct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                Text("$${"%.0f".format(bestGkPrize)}", color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            }
+                                            Slider(
+                                                value = gkPct,
+                                                onValueChange = {
+                                                    percentages = PrizeCalculator.rebalanceHierarchicalPercentages(PrizeCategory.BEST_GK, it, percentages)
+                                                },
+                                                valueRange = 0f..100f
+                                            )
+                                        }
                                     }
                                 } else {
                                     Text(
@@ -707,7 +910,10 @@ fun CreateTournamentWizardDialog(
                                     topScorerPrize,
                                     bestGkPrize,
                                     homeAndAway,
-                                    financialModel
+                                    financialModel,
+                                    awardTiming,
+                                    assisterPrize,
+                                    mvpPrize
                                 )
                             },
                             enabled = name.isNotBlank() && selectedTeamIds.size >= 3,
